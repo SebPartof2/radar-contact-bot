@@ -117,6 +117,7 @@ export function startWebServer(client) {
         kind: w.kind,
         value: w.value,
         label: w.label,
+        mode: w.mode ?? 'both',
         addedBy: w.added_by,
         addedAt: w.added_at,
       })),
@@ -177,15 +178,21 @@ export function startWebServer(client) {
     if (kind === 'cid') {
       const cid = String(req.body.value ?? '').trim();
       if (!/^\d{5,10}$/.test(cid)) return res.status(400).json({ error: 'Invalid CID' });
-      const added = db.addWatch(guild.id, 'cid', cid, label || null, req.user.id);
-      return res.json({ ok: true, added });
+
+      const mode = req.body.mode ?? 'both';
+      if (!['both', 'pilot', 'controller'].includes(mode)) {
+        return res.status(400).json({ error: 'mode must be both, pilot or controller' });
+      }
+
+      const result = db.addWatch(guild.id, 'cid', cid, label || null, req.user.id, mode);
+      return res.json({ ok: true, result });
     }
 
     if (kind === 'prefix') {
       const prefix = positionPrefix(String(req.body.value ?? '').trim());
       if (!/^[A-Z0-9]{2,8}$/.test(prefix)) return res.status(400).json({ error: 'Invalid prefix' });
-      const added = db.addWatch(guild.id, 'prefix', prefix, label || null, req.user.id);
-      return res.json({ ok: true, added });
+      const result = db.addWatch(guild.id, 'prefix', prefix, label || null, req.user.id);
+      return res.json({ ok: true, result });
     }
 
     // Position and facility ids are opaque, so the label is derived from the airspace tree
@@ -194,16 +201,16 @@ export function startWebServer(client) {
       const found = getPosition(String(req.body.value ?? ''));
       if (!found) return res.status(400).json({ error: 'Unknown position' });
       const name = `${found.position.callsign} (${found.position.radioName})`;
-      const added = db.addWatch(guild.id, 'position', found.position.id, name, req.user.id);
-      return res.json({ ok: true, added });
+      const result = db.addWatch(guild.id, 'position', found.position.id, name, req.user.id);
+      return res.json({ ok: true, result });
     }
 
     if (kind === 'facility') {
       const facility = getFacility(String(req.body.value ?? ''));
       if (!facility) return res.status(400).json({ error: 'Unknown facility' });
       const name = `${facility.name} (${facility.id})`;
-      const added = db.addWatch(guild.id, 'facility', facility.id, name, req.user.id);
-      return res.json({ ok: true, added });
+      const result = db.addWatch(guild.id, 'facility', facility.id, name, req.user.id);
+      return res.json({ ok: true, result });
     }
 
     res.status(400).json({ error: 'kind must be cid, prefix, position or facility' });

@@ -106,6 +106,17 @@ if (db.pragma('user_version', { simple: true }) < 2) {
   console.log('[db] migrated sessions to record their originating watch');
 }
 
+// A CID watch can be limited to when that person is flying, or controlling, or both.
+// Existing watches keep the old behaviour, which was both.
+if (db.pragma('user_version', { simple: true }) < 3) {
+  const columns = db.pragma('table_info(watches)').map((column) => column.name);
+  if (!columns.includes('mode')) {
+    db.exec(`ALTER TABLE watches ADD COLUMN mode TEXT NOT NULL DEFAULT 'both'`);
+  }
+  db.pragma('user_version = 3');
+  console.log('[db] migrated watches to support pilot/controller CID modes');
+}
+
 /* --- guild configuration --- */
 
 export function setGuildConfig(guildId, channelId, managerRoleId) {
@@ -135,15 +146,26 @@ export function forgetGuild(guildId) {
 
 /* --- watches --- */
 
-export function addWatch(guildId, kind, value, label, addedBy) {
-  const info = db
-    .prepare(
-      `INSERT INTO watches (guild_id, kind, value, label, added_by, added_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (guild_id, kind, value) DO NOTHING`,
-    )
-    .run(guildId, kind, value, label ?? null, addedBy, Date.now());
-  return info.changes > 0;
+/** Returns 'added', 'updated' (the mode changed) or 'unchanged'. */
+export function addWatch(guildId, kind, value, label, addedBy, mode = 'both') {
+  const existing = db
+    .prepare('SELECT mode FROM watches WHERE guild_id = ? AND kind = ? AND value = ?')
+    .get(guildId, kind, value);
+
+  if (existing) {
+    if (existing.mode === mode) return 'unchanged';
+    // Re-adding a CID with a different mode retargets it rather than erroring.
+    db.prepare(
+      'UPDATE watches SET mode = ?, label = COALESCE(?, label) WHERE guild_id = ? AND kind = ? AND value = ?',
+    ).run(mode, label ?? null, guildId, kind, value);
+    return 'updated';
+  }
+
+  db.prepare(
+    `INSERT INTO watches (guild_id, kind, value, label, added_by, added_at, mode)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(guildId, kind, value, label ?? null, addedBy, Date.now(), mode);
+  return 'added';
 }
 
 export function removeWatch(guildId, kind, value) {
@@ -169,6 +191,8 @@ export function getWatchSets(guildId) {
     positions: of('position'),
     facilities: of('facility'),
     exclusions: getExclusionSets(guildId),
+    // cid -> 'both' | 'pilot' | 'controller'
+    cidModes: new Map(rows.filter((r) => r.kind === 'cid').map((r) => [r.value, r.mode])),
     labels: new Map(rows.map((r) => [`${r.kind}:${r.value}`, r.label])),
   };
 }

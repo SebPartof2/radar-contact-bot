@@ -229,7 +229,23 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
                           />
                         </TableCell>
                         <TableCell sx={{ fontFamily: 'monospace' }}>
-                          {watchTarget(watch)}
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <span>{watchTarget(watch)}</span>
+                            {watch.kind === 'cid' && watch.mode !== 'both' && (
+                              <Chip
+                                size="small"
+                                icon={
+                                  watch.mode === 'pilot' ? (
+                                    <FlightIcon sx={{ fontSize: 13 }} />
+                                  ) : (
+                                    <HeadsetMicIcon sx={{ fontSize: 13 }} />
+                                  )
+                                }
+                                label={watch.mode === 'pilot' ? 'flying' : 'controlling'}
+                                sx={{ height: 20, fontSize: 11 }}
+                              />
+                            )}
+                          </Stack>
                         </TableCell>
                         <TableCell sx={{ color: 'text.secondary' }}>{watch.label || '—'}</TableCell>
                         <TableCell align="right">
@@ -400,10 +416,12 @@ function AddWatchDialog({ open, onClose, onSubmit }) {
   const [kind, setKind] = useState('cid');
   const [value, setValue] = useState('');
   const [label, setLabel] = useState('');
+  const [mode, setMode] = useState('both');
 
   const close = () => {
     setValue('');
     setLabel('');
+    setMode('both');
     onClose();
   };
 
@@ -430,6 +448,20 @@ function AddWatchDialog({ open, onClose, onSubmit }) {
             }
           />
 
+          {/* Only a CID can be both a pilot and a controller, so the choice is CID-only. */}
+          {kind === 'cid' && (
+            <TextField
+              select
+              label="Notify when they are"
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+            >
+              <MenuItem value="both">Flying or controlling</MenuItem>
+              <MenuItem value="pilot">Flying only</MenuItem>
+              <MenuItem value="controller">Controlling only</MenuItem>
+            </TextField>
+          )}
+
           <TextField
             label="Label (optional)"
             value={label}
@@ -444,7 +476,12 @@ function AddWatchDialog({ open, onClose, onSubmit }) {
           variant="contained"
           disabled={!value.trim()}
           onClick={() => {
-            onSubmit({ kind, value: value.trim(), label: label.trim() });
+            onSubmit({
+              kind,
+              value: value.trim(),
+              label: label.trim(),
+              ...(kind === 'cid' && { mode }),
+            });
             close();
           }}
         >

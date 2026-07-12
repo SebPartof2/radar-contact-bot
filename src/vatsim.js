@@ -107,9 +107,15 @@ export function extractConnections(feed) {
  * every position a controller is actually working.
  */
 export function matchWatch(connection, watches, nas) {
-  const { cids, prefixes, positions, facilities, exclusions } = watches;
+  const { cids, prefixes, positions, facilities, exclusions, cidModes } = watches;
 
-  if (cids.has(connection.cid)) return { kind: 'cid', value: connection.cid };
+  if (cids.has(connection.cid)) {
+    // A CID watch can be limited to only when that person is flying, or only controlling.
+    const mode = cidModes?.get(connection.cid) ?? 'both';
+    if (mode === 'both' || mode === connection.type) {
+      return { kind: 'cid', value: connection.cid };
+    }
+  }
   if (connection.type !== 'controller') return null;
 
   const prefix = positionPrefix(connection.callsign);

@@ -1,0 +1,10 @@
+# Local development only.
+#
+# Compose loads this automatically for a bare `docker compose up`, which publishes the dashboard
+# on http://localhost:3000. Dokploy deploys with an explicit `-f docker-compose.yml`, and that
+# switches the automatic override off — so nothing is published on the server and the host port
+# can never collide.
+services:
+  rc-notify:
+    ports:
+      - "${WEB_PORT:-3000}:3000"

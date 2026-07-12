@@ -27,8 +27,9 @@ services:
       MISSED_POLLS_BEFORE_OFFLINE: ${MISSED_POLLS_BEFORE_OFFLINE:-2}
       DATABASE_PATH: /data/rcnotify.sqlite
       TZ: ${TZ:-UTC}
-    ports:
-      - "${WEB_PORT:-3000}:3000"
+    # No published port: Dokploy's proxy reaches the container directly on 3000. Publishing to
+    # the host is what caused "port is already allocated", and it is only useful locally —
+    # docker-compose.override.yml does that, and Compose ignores it when a file is passed with -f.
     volumes:
       - rc-notify-data:/data
 

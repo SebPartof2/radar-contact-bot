@@ -97,9 +97,9 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={5}>
-          <Card elevation={0} variant="outlined" sx={{ height: '100%' }}>
+      <Grid container spacing={3} alignItems="stretch">
+        <Grid item xs={12} md={5} sx={{ display: 'flex' }}>
+          <Card elevation={0} variant="outlined" sx={{ width: '100%' }}>
             <CardHeader
               title="Configuration"
               subheader={isAdmin ? 'Where notifications go, and who may edit monitors' : 'Manage Server is required to change this'}
@@ -162,8 +162,8 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={7}>
-          <Card elevation={0} variant="outlined" sx={{ height: '100%' }}>
+        <Grid item xs={12} md={7} sx={{ display: 'flex' }}>
+          <Card elevation={0} variant="outlined" sx={{ width: '100%' }}>
             <CardHeader
               title="Monitors"
               subheader={`${guild.watches.length} watched`}
@@ -181,7 +181,7 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
             <Divider />
             <CardContent sx={{ p: 0 }}>
               {guild.watches.length === 0 ? (
-                <Typography color="text.secondary" sx={{ p: 3 }}>
+                <Typography color="text.secondary" align="center" sx={{ p: 5 }}>
                   Nothing is being monitored yet.
                 </Typography>
               ) : (
@@ -243,13 +243,19 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
         <Divider />
         <CardContent>
           {live.length === 0 ? (
-            <Typography color="text.secondary">
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
               None of the monitored people or positions are online right now.
             </Typography>
           ) : (
-            <Grid container spacing={2}>
+            <Grid container spacing={2} alignItems="stretch">
               {live.map((entry) => (
-                <Grid item xs={12} md={6} key={`${entry.cid}:${entry.callsign}`}>
+                <Grid
+                  item
+                  xs={12}
+                  md={6}
+                  key={`${entry.cid}:${entry.callsign}`}
+                  sx={{ display: 'flex' }}
+                >
                   <LiveCard entry={entry} />
                 </Grid>
               ))}
@@ -285,7 +291,7 @@ function LiveCard({ entry }) {
   const plan = entry.flightPlan;
 
   return (
-    <Card variant="outlined" elevation={0} sx={{ height: '100%', bgcolor: 'background.default' }}>
+    <Card variant="outlined" elevation={0} sx={{ width: '100%', bgcolor: 'background.default' }}>
       <CardContent>
         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
           {controller ? <HeadsetMicIcon color="error" /> : <FlightIcon color="secondary" />}

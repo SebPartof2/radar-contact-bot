@@ -52,71 +52,86 @@ export default function App() {
   const { user, guilds } = state;
 
   return (
-    <Box sx={{ minHeight: '100vh' }}>
-      <AppBar position="sticky" color="transparent" elevation={0} sx={{ backdropFilter: 'blur(8px)', borderBottom: 1, borderColor: 'divider' }}>
-        <Toolbar sx={{ gap: 2 }}>
-          <RadarIcon color="primary" />
-          <Typography variant="h6" sx={{ mr: 2 }}>
-            RC Notify
-          </Typography>
-
-          {guilds.length > 0 && (
-            <TextField
-              select
-              size="small"
-              value={guildId}
-              onChange={(event) => setGuildId(event.target.value)}
-              sx={{ minWidth: 220 }}
-            >
-              {guilds.map((guild) => (
-                <MenuItem key={guild.id} value={guild.id}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Avatar src={guildIcon(guild)} sx={{ width: 22, height: 22, fontSize: 12 }}>
-                      {guild.name[0]}
-                    </Avatar>
-                    <span>{guild.name}</span>
-                  </Stack>
-                </MenuItem>
-              ))}
-            </TextField>
-          )}
-
-          <Box sx={{ flexGrow: 1 }} />
-
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Avatar
-              src={
-                user.avatar
-                  ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`
-                  : undefined
-              }
-              sx={{ width: 30, height: 30 }}
-            >
-              {user.username[0]}
-            </Avatar>
-            <Typography variant="body2" color="text.secondary">
-              {user.username}
+    <Box sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+      <AppBar
+        position="sticky"
+        color="transparent"
+        elevation={0}
+        sx={{
+          backdropFilter: 'blur(8px)',
+          bgcolor: 'rgba(14, 17, 23, 0.75)',
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        {/* Same container as the page body, so the header lines up with the content below it. */}
+        <Container maxWidth="lg" disableGutters>
+          <Toolbar sx={{ gap: 2, px: { xs: 2, sm: 3 } }}>
+            <RadarIcon color="primary" />
+            <Typography variant="h6" sx={{ mr: 2 }}>
+              RC Notify
             </Typography>
-            <Button
-              size="small"
-              color="inherit"
-              onClick={async () => {
-                await api.logout();
-                setState({ status: 'anonymous' });
-              }}
-            >
-              Sign out
-            </Button>
-          </Stack>
-        </Toolbar>
+
+            {guilds.length > 0 && (
+              <TextField
+                select
+                size="small"
+                value={guildId}
+                onChange={(event) => setGuildId(event.target.value)}
+                sx={{ minWidth: 220 }}
+              >
+                {guilds.map((guild) => (
+                  <MenuItem key={guild.id} value={guild.id}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Avatar src={guildIcon(guild)} sx={{ width: 22, height: 22, fontSize: 12 }}>
+                        {guild.name[0]}
+                      </Avatar>
+                      <span>{guild.name}</span>
+                    </Stack>
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+
+            <Box sx={{ flexGrow: 1 }} />
+
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Avatar
+                src={
+                  user.avatar
+                    ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`
+                    : undefined
+                }
+                sx={{ width: 30, height: 30 }}
+              >
+                {user.username[0]}
+              </Avatar>
+              <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                {user.username}
+              </Typography>
+              <Button
+                size="small"
+                color="inherit"
+                onClick={async () => {
+                  await api.logout();
+                  setState({ status: 'anonymous' });
+                }}
+              >
+                Sign out
+              </Button>
+            </Stack>
+          </Toolbar>
+        </Container>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container maxWidth="lg" sx={{ py: 4, flexGrow: 1, width: '100%' }}>
         {guilds.length === 0 ? (
-          <Typography color="text.secondary">
-            You do not have access to any server running RC Notify. You need <b>Manage Server</b>,
-            or the manager role that server has configured.
-          </Typography>
+          <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '50vh', px: 2 }}>
+            <Typography color="text.secondary" align="center" sx={{ maxWidth: 460 }}>
+              You do not have access to any server running RC Notify. You need <b>Manage Server</b>,
+              or the manager role that server has configured.
+            </Typography>
+          </Box>
         ) : (
           <GuildDashboard
             key={guildId}

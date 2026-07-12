@@ -64,7 +64,7 @@ function vnasControllerEmbed(c, watch, label) {
   // Only controllers actually covering other positions get this field.
   if (v.topDown.length > 0) {
     embed.addFields({
-      name: 'Top Down Displays',
+      name: 'Secondary Displays',
       value: v.topDown.map((position) => position.radioName).join('\n'),
       inline: true,
     });

@@ -27,6 +27,14 @@ db.exec(`
     PRIMARY KEY (guild_id, kind, value)
   );
 
+  -- Holes punched in a facility watch: "all of ZAB except PHX_S_TWR".
+  CREATE TABLE IF NOT EXISTS exclusions (
+    guild_id TEXT NOT NULL,
+    kind     TEXT NOT NULL CHECK (kind IN ('position', 'facility')),
+    value    TEXT NOT NULL,
+    PRIMARY KEY (guild_id, kind, value)
+  );
+
   CREATE TABLE IF NOT EXISTS nas_tree (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
     json       TEXT NOT NULL,
@@ -51,6 +59,9 @@ db.exec(`
     fingerprint  TEXT NOT NULL,
     missed_polls INTEGER NOT NULL DEFAULT 0,
     seen_at      INTEGER NOT NULL,
+    -- Which watch produced this message, so removing that watch can find it again.
+    watch_kind   TEXT NOT NULL DEFAULT '',
+    watch_value  TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (guild_id, key)
   );
 `);
@@ -79,6 +90,20 @@ if (db.pragma('user_version', { simple: true }) < 1) {
     COMMIT;
   `);
   console.log('[db] migrated watches to allow vNAS position and facility watches');
+}
+
+// Older sessions predate knowing which watch created them; the columns default to empty and
+// those messages are simply reposted once.
+if (db.pragma('user_version', { simple: true }) < 2) {
+  const columns = db.pragma('table_info(sessions)').map((column) => column.name);
+  if (!columns.includes('watch_kind')) {
+    db.exec(`
+      ALTER TABLE sessions ADD COLUMN watch_kind TEXT NOT NULL DEFAULT '';
+      ALTER TABLE sessions ADD COLUMN watch_value TEXT NOT NULL DEFAULT '';
+    `);
+  }
+  db.pragma('user_version = 2');
+  console.log('[db] migrated sessions to record their originating watch');
 }
 
 /* --- guild configuration --- */
@@ -143,8 +168,49 @@ export function getWatchSets(guildId) {
     prefixes: of('prefix'),
     positions: of('position'),
     facilities: of('facility'),
+    exclusions: getExclusionSets(guildId),
     labels: new Map(rows.map((r) => [`${r.kind}:${r.value}`, r.label])),
   };
+}
+
+/* --- exclusions: positions or facilities carved out of a facility watch --- */
+
+export function addExclusion(guildId, kind, value) {
+  return (
+    db
+      .prepare(
+        `INSERT INTO exclusions (guild_id, kind, value) VALUES (?, ?, ?)
+         ON CONFLICT (guild_id, kind, value) DO NOTHING`,
+      )
+      .run(guildId, kind, value).changes > 0
+  );
+}
+
+export function removeExclusion(guildId, kind, value) {
+  return (
+    db
+      .prepare('DELETE FROM exclusions WHERE guild_id = ? AND kind = ? AND value = ?')
+      .run(guildId, kind, value).changes > 0
+  );
+}
+
+export function listExclusions(guildId) {
+  return db.prepare('SELECT kind, value FROM exclusions WHERE guild_id = ?').all(guildId);
+}
+
+export function getExclusionSets(guildId) {
+  const rows = listExclusions(guildId);
+  return {
+    positions: new Set(rows.filter((r) => r.kind === 'position').map((r) => r.value)),
+    facilities: new Set(rows.filter((r) => r.kind === 'facility').map((r) => r.value)),
+  };
+}
+
+/** An exclusion outside every facility watch means nothing; drop it rather than let it rot. */
+export function pruneExclusions(guildId, stillApplies) {
+  for (const exclusion of listExclusions(guildId)) {
+    if (!stillApplies(exclusion)) removeExclusion(guildId, exclusion.kind, exclusion.value);
+  }
 }
 
 /* --- cached vNAS airspace tree --- */
@@ -174,15 +240,19 @@ export function getSession(guildId, key) {
 export function upsertSession(session) {
   db.prepare(
     `INSERT INTO sessions
-       (guild_id, key, cid, callsign, message_id, channel_id, fingerprint, missed_polls, seen_at)
+       (guild_id, key, cid, callsign, message_id, channel_id, fingerprint, missed_polls, seen_at,
+        watch_kind, watch_value)
      VALUES
-       (@guild_id, @key, @cid, @callsign, @message_id, @channel_id, @fingerprint, 0, @seen_at)
+       (@guild_id, @key, @cid, @callsign, @message_id, @channel_id, @fingerprint, 0, @seen_at,
+        @watch_kind, @watch_value)
      ON CONFLICT (guild_id, key) DO UPDATE SET
        message_id   = excluded.message_id,
        channel_id   = excluded.channel_id,
        fingerprint  = excluded.fingerprint,
        missed_polls = 0,
-       seen_at      = excluded.seen_at`,
+       seen_at      = excluded.seen_at,
+       watch_kind   = excluded.watch_kind,
+       watch_value  = excluded.watch_value`,
   ).run(session);
 }
 

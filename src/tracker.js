@@ -2,7 +2,9 @@ import { config } from './config.js';
 import * as db from './db.js';
 import { buildEmbed } from './embeds.js';
 import { fetchVnasFeed, indexVnasControllers } from './vnas.js';
-import { facilityCovers } from './nas.js';
+import { facilityAncestors, facilityCovers } from './nas.js';
+
+const nas = { facilityAncestors, facilityCovers };
 import {
   extractConnections,
   fetchDataFeed,
@@ -83,7 +85,7 @@ async function syncGuild(client, guild, connections) {
 
   const online = new Map();
   for (const connection of connections) {
-    const watch = matchWatch(connection, watches, facilityCovers);
+    const watch = matchWatch(connection, watches, nas);
     if (watch) online.set(sessionKey(connection), { connection, watch });
   }
 
@@ -122,6 +124,8 @@ async function announce(channel, guildId, key, connection, watch, label, stamp) 
     channel_id: channel.id,
     fingerprint: stamp,
     seen_at: Date.now(),
+    watch_kind: watch.kind,
+    watch_value: watch.value,
   });
   console.log(`[${guildId}] online: ${connection.callsign} (${connection.cid})`);
 }
@@ -151,12 +155,16 @@ async function retract(client, session) {
   console.log(`[${session.guild_id}] offline: ${session.callsign} (${session.cid})`);
 }
 
-/** Called after a watch is removed so its messages disappear without waiting for a poll. */
+/**
+ * Called after a watch is removed so its messages disappear without waiting for a poll. Each
+ * session records the watch that produced it, so this is an exact lookup rather than a guess —
+ * a session created by a facility watch is not collateral damage when a CID watch is removed.
+ */
 export async function retractUnwatched(client, guildId) {
-  const { cids, prefixes } = db.getWatchSets(guildId);
+  const live = new Set(db.listWatches(guildId).map((watch) => `${watch.kind}:${watch.value}`));
 
   for (const session of db.getSessions(guildId)) {
-    if (cids.has(session.cid) || prefixes.has(positionPrefix(session.callsign))) continue;
+    if (live.has(`${session.watch_kind}:${session.watch_value}`)) continue;
     await retract(client, session);
   }
 }

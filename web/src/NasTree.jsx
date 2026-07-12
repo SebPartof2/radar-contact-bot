@@ -46,6 +46,13 @@ const POSITION_COLORS = {
 const positionColor = (callsign) =>
   POSITION_COLORS[String(callsign ?? '').toUpperCase().split('_').pop()] ?? '#8b949e';
 
+const TOOLTIPS = {
+  watched: (id) => `Watching ${id} — click to stop`,
+  covered: (id, parent) => `Covered by ${parent} — click to exclude ${id}`,
+  excluded: (id, parent) => `Excluded from ${parent} — click to put it back`,
+  off: (id) => `Watch ${id}`,
+};
+
 const matches = (text, query) => String(text ?? '').toLowerCase().includes(query);
 
 /**
@@ -81,9 +88,12 @@ export default function NasTree({ guildId, isManager }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
 
+  const [exclusions, setExclusions] = useState([]);
+
   const loadWatches = useCallback(async () => {
     const guild = await api.guild(guildId);
     setWatches(guild.watches);
+    setExclusions(guild.exclusions ?? []);
   }, [guildId]);
 
   useEffect(() => {
@@ -100,6 +110,14 @@ export default function NasTree({ guildId, isManager }) {
   const watchedPositions = useMemo(
     () => new Set(watches.filter((w) => w.kind === 'position').map((w) => w.value)),
     [watches],
+  );
+  const excludedFacilities = useMemo(
+    () => new Set(exclusions.filter((e) => e.kind === 'facility').map((e) => e.value)),
+    [exclusions],
+  );
+  const excludedPositions = useMemo(
+    () => new Set(exclusions.filter((e) => e.kind === 'position').map((e) => e.value)),
+    [exclusions],
   );
 
   const trimmed = query.trim().toLowerCase();
@@ -119,10 +137,19 @@ export default function NasTree({ guildId, isManager }) {
       return next;
     });
 
-  const toggleWatch = async (kind, value, watched) => {
+  /**
+   * A node is in one of four states, and clicking its box moves it to the sensible opposite:
+   *   watched  — explicitly ticked            -> untick it
+   *   covered  — ticked via a parent facility -> carve it out (an exclusion)
+   *   excluded — carved out of that parent    -> put it back
+   *   off      — nothing                      -> watch it
+   */
+  const toggle = async (kind, value, state) => {
     setBusy(value);
     try {
-      if (watched) await api.removeWatch(guildId, kind, value);
+      if (state === 'watched') await api.removeWatch(guildId, kind, value);
+      else if (state === 'covered') await api.addExclusion(guildId, { kind, value });
+      else if (state === 'excluded') await api.removeExclusion(guildId, kind, value);
       else await api.addWatch(guildId, { kind, value });
       await loadWatches();
     } catch (e) {
@@ -193,14 +220,13 @@ export default function NasTree({ guildId, isManager }) {
               depth={0}
               expanded={expanded}
               onToggleExpanded={toggleExpanded}
-              watchedFacilities={watchedFacilities}
-              watchedPositions={watchedPositions}
-              onToggleWatch={toggleWatch}
+              sets={{ watchedFacilities, watchedPositions, excludedFacilities, excludedPositions }}
+              onToggle={toggle}
               isManager={isManager}
               busy={busy}
               // A search auto-opens what it found; otherwise the tree starts collapsed.
               forceOpen={Boolean(trimmed)}
-              coveredBy={null}
+              ancestorWatch={null}
             />
           ))
         )}
@@ -220,19 +246,26 @@ function FacilityRow({
   depth,
   expanded,
   onToggleExpanded,
-  watchedFacilities,
-  watchedPositions,
-  onToggleWatch,
+  sets,
+  onToggle,
   isManager,
   busy,
   forceOpen,
-  coveredBy,
+  ancestorWatch,
 }) {
+  const { watchedFacilities, watchedPositions, excludedFacilities, excludedPositions } = sets;
+
   const open = forceOpen || expanded.has(facility.id);
   const watched = watchedFacilities.has(facility.id);
-  // An ancestor already covers everything below it, so nested boxes are checked and locked.
-  const covered = coveredBy ?? (watched ? facility.id : null);
-  const inherited = Boolean(coveredBy);
+  const excluded = excludedFacilities.has(facility.id);
+
+  // Ticked because a parent facility is watched — unless it has been carved back out.
+  const covered = Boolean(ancestorWatch) && !excluded;
+  const state = watched ? 'watched' : covered ? 'covered' : excluded ? 'excluded' : 'off';
+
+  // What the rows below inherit: this facility if it is watched, otherwise whatever covers it —
+  // and nothing at all if this facility was excluded, which shadows everything under it.
+  const inheritedWatch = watched ? facility.id : excluded ? null : ancestorWatch;
 
   const hasChildren = facility.children.length > 0 || facility.positions.length > 0;
   const type = FACILITY_TYPES[facility.type] ?? { label: facility.type, color: '#8b949e' };
@@ -249,8 +282,9 @@ function FacilityRow({
           py: 0.35,
           // A coloured rail on the left makes the depth obvious without counting indents.
           borderLeft: 3,
-          borderColor: watched || inherited ? type.color : 'transparent',
+          borderColor: watched || covered ? type.color : 'transparent',
           bgcolor: watched ? `${type.color}14` : 'transparent',
+          opacity: excluded ? 0.55 : 1,
           '&:hover': { bgcolor: 'action.hover' },
         }}
       >
@@ -263,19 +297,13 @@ function FacilityRow({
           {open ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
         </IconButton>
 
-        <Tooltip
-          title={
-            inherited
-              ? `Already covered by ${coveredBy}`
-              : `Watch every position under ${facility.id}`
-          }
-        >
+        <Tooltip title={TOOLTIPS[state](facility.id, ancestorWatch)}>
           <span>
             <Checkbox
               size="small"
-              checked={watched || inherited}
-              disabled={!isManager || inherited || busy === facility.id}
-              onChange={() => onToggleWatch('facility', facility.id, watched)}
+              checked={watched || covered}
+              disabled={!isManager || busy === facility.id}
+              onChange={() => onToggle('facility', facility.id, state)}
               sx={{ color: type.color, '&.Mui-checked': { color: type.color } }}
             />
           </span>
@@ -306,6 +334,13 @@ function FacilityRow({
         </Typography>
 
         <Box sx={{ flexGrow: 1 }} />
+        {excluded && (
+          <Chip
+            label={`excluded from ${ancestorWatch}`}
+            size="small"
+            sx={{ height: 18, fontSize: 10, bgcolor: 'action.selected' }}
+          />
+        )}
         {facility.positions.length > 0 && (
           <Typography variant="caption" color="text.secondary">
             {facility.positions.length} pos
@@ -323,20 +358,29 @@ function FacilityRow({
             depth={depth + 1}
             expanded={expanded}
             onToggleExpanded={onToggleExpanded}
-            watchedFacilities={watchedFacilities}
-            watchedPositions={watchedPositions}
-            onToggleWatch={onToggleWatch}
+            sets={sets}
+            onToggle={onToggle}
             isManager={isManager}
             busy={busy}
             forceOpen={forceOpen}
-            coveredBy={covered}
+            ancestorWatch={inheritedWatch}
           />
         ))}
 
         {facility.positions.map((position) => {
           const positionWatched = watchedPositions.has(position.id);
+          const positionExcluded = excludedPositions.has(position.id);
+          const positionCovered = Boolean(inheritedWatch) && !positionExcluded;
+          const positionState = positionWatched
+            ? 'watched'
+            : positionCovered
+              ? 'covered'
+              : positionExcluded
+                ? 'excluded'
+                : 'off';
+
           const color = positionColor(position.callsign);
-          const on = positionWatched || Boolean(covered);
+          const on = positionWatched || positionCovered;
 
           return (
             <Stack
@@ -351,16 +395,17 @@ function FacilityRow({
                 borderLeft: 3,
                 borderColor: on ? color : 'transparent',
                 bgcolor: positionWatched ? `${color}14` : 'transparent',
+                opacity: positionExcluded ? 0.55 : 1,
                 '&:hover': { bgcolor: 'action.hover' },
               }}
             >
-              <Tooltip title={covered ? `Already covered by ${covered}` : 'Watch this position'}>
+              <Tooltip title={TOOLTIPS[positionState](position.callsign, inheritedWatch)}>
                 <span>
                   <Checkbox
                     size="small"
                     checked={on}
-                    disabled={!isManager || Boolean(covered) || busy === position.id}
-                    onChange={() => onToggleWatch('position', position.id, positionWatched)}
+                    disabled={!isManager || busy === position.id}
+                    onChange={() => onToggle('position', position.id, positionState)}
                     sx={{ color, '&.Mui-checked': { color } }}
                   />
                 </span>

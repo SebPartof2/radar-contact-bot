@@ -54,27 +54,37 @@ let descendants = new Map();
 let positionIndex = new Map();
 /** facilityId -> facility node. */
 let facilityIndex = new Map();
+/** facilityId -> itself plus every facility above it, so an exclusion shadows what is under it. */
+let ancestorIndex = new Map();
 
 function reindex(next) {
   tree = next;
   descendants = new Map();
   positionIndex = new Map();
   facilityIndex = new Map();
+  ancestorIndex = new Map();
 
-  const walk = (facility) => {
+  const walk = (facility, above) => {
     const ids = new Set([facility.id]);
     facilityIndex.set(facility.id, facility);
+    ancestorIndex.set(facility.id, new Set([facility.id, ...above]));
+
     for (const position of facility.positions) {
       positionIndex.set(position.id, { position, facility });
     }
     for (const child of facility.children) {
-      for (const id of walk(child)) ids.add(id);
+      for (const id of walk(child, ancestorIndex.get(facility.id))) ids.add(id);
     }
     descendants.set(facility.id, ids);
     return ids;
   };
 
-  for (const artcc of tree.children) walk(artcc);
+  for (const artcc of tree.children) walk(artcc, new Set());
+}
+
+/** The facility and everything above it, up to the ARTCC. */
+export function facilityAncestors(facilityId) {
+  return ancestorIndex.get(facilityId) ?? new Set([facilityId]);
 }
 
 export function getNasTree() {

@@ -22,4 +22,7 @@ export const api = {
   addWatch: (id, body) => request(`/guilds/${id}/watches`, { method: 'POST', body }),
   removeWatch: (id, kind, value) =>
     request(`/guilds/${id}/watches/${kind}/${encodeURIComponent(value)}`, { method: 'DELETE' }),
+  addExclusion: (id, body) => request(`/guilds/${id}/exclusions`, { method: 'POST', body }),
+  removeExclusion: (id, kind, value) =>
+    request(`/guilds/${id}/exclusions/${kind}/${encodeURIComponent(value)}`, { method: 'DELETE' }),
 };

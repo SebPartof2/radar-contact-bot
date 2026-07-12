@@ -4,12 +4,26 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { config, OAUTH_REDIRECT_PATH } from '../config.js';
 import * as db from '../db.js';
 import { getLive, retractAll, retractUnwatched } from '../tracker.js';
-import { getFacility, getNasTree, getPosition } from '../nas.js';
+import { facilityCovers, getFacility, getNasTree, getPosition } from '../nas.js';
 import { positionPrefix } from '../vatsim.js';
 import { completeLogin, getAccess, loginUrl, logout, requireUser } from './auth.js';
 
 const CHANNEL_PERMISSIONS = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'ManageMessages'];
 const staticDir = fileURLToPath(new URL('../../web/dist', import.meta.url));
+
+/** An exclusion only means something inside a facility watch; once that is gone, so is it. */
+function pruneOrphanedExclusions(guildId) {
+  const facilities = [...db.getWatchSets(guildId).facilities];
+
+  db.pruneExclusions(guildId, (exclusion) => {
+    const facilityId =
+      exclusion.kind === 'facility'
+        ? exclusion.value
+        : getPosition(exclusion.value)?.facility.id;
+    if (!facilityId) return false;
+    return facilities.some((watched) => facilityCovers(watched, facilityId));
+  });
+}
 
 export function startWebServer(client) {
   const app = express();
@@ -106,6 +120,7 @@ export function startWebServer(client) {
         addedBy: w.added_by,
         addedAt: w.added_at,
       })),
+      exclusions: db.listExclusions(guild.id),
     });
   });
 
@@ -202,7 +217,41 @@ export function startWebServer(client) {
     }
 
     const removed = db.removeWatch(guild.id, kind, value);
-    if (removed) await retractUnwatched(client, guild.id);
+    if (removed) {
+      if (kind === 'facility') pruneOrphanedExclusions(guild.id);
+      await retractUnwatched(client, guild.id);
+    }
+    res.json({ ok: true, removed });
+  });
+
+  /* Exclusions carve a hole in a facility watch: "all of ZAB except Phoenix Tower". */
+
+  guildRouter.post('/exclusions', (req, res) => {
+    const { guild } = req.access;
+    const { kind, value } = req.body ?? {};
+
+    if (kind === 'position' && !getPosition(String(value ?? ''))) {
+      return res.status(400).json({ error: 'Unknown position' });
+    }
+    if (kind === 'facility' && !getFacility(String(value ?? ''))) {
+      return res.status(400).json({ error: 'Unknown facility' });
+    }
+    if (!['position', 'facility'].includes(kind)) {
+      return res.status(400).json({ error: 'kind must be position or facility' });
+    }
+
+    const added = db.addExclusion(guild.id, kind, String(value));
+    res.json({ ok: true, added });
+  });
+
+  guildRouter.delete('/exclusions/:kind/:value', async (req, res) => {
+    const { guild } = req.access;
+    const { kind, value } = req.params;
+    if (!['position', 'facility'].includes(kind)) {
+      return res.status(400).json({ error: 'Unknown kind' });
+    }
+
+    const removed = db.removeExclusion(guild.id, kind, value);
     res.json({ ok: true, removed });
   });
 

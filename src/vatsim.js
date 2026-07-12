@@ -106,8 +106,8 @@ export function extractConnections(feed) {
  * position and facility watches additionally need vNAS, which is the only feed that knows
  * every position a controller is actually working.
  */
-export function matchWatch(connection, watches, facilityCovers) {
-  const { cids, prefixes, positions, facilities } = watches;
+export function matchWatch(connection, watches, nas) {
+  const { cids, prefixes, positions, facilities, exclusions } = watches;
 
   if (cids.has(connection.cid)) return { kind: 'cid', value: connection.cid };
   if (connection.type !== 'controller') return null;
@@ -118,14 +118,27 @@ export function matchWatch(connection, watches, facilityCovers) {
   const vnas = connection.vnas;
   if (!vnas) return null;
 
+  /** Has this position been carved out of the facility watch that would otherwise cover it? */
+  const excluded = (position) => {
+    if (exclusions.positions.has(position.positionId)) return true;
+    // An excluded TRACON hides every tower beneath it, so check the whole chain upward.
+    for (const facilityId of nas.facilityAncestors(position.facilityId)) {
+      if (exclusions.facilities.has(facilityId)) return true;
+    }
+    return false;
+  };
+
   // Every position they hold counts, not just the one they are signed in as: a Center
   // controller covering PHX_A_APP top-down is working Phoenix Approach.
   for (const position of [vnas.primary, ...vnas.topDown]) {
+    // An explicitly ticked position always wins, even inside an excluded facility.
     if (positions.has(position.positionId)) {
       return { kind: 'position', value: position.positionId };
     }
+    if (excluded(position)) continue;
+
     for (const facilityId of facilities) {
-      if (facilityCovers(facilityId, position.facilityId)) {
+      if (nas.facilityCovers(facilityId, position.facilityId)) {
         return { kind: 'facility', value: facilityId };
       }
     }

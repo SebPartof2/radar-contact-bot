@@ -16,11 +16,19 @@ services:
       MISSED_POLLS_BEFORE_OFFLINE: ${MISSED_POLLS_BEFORE_OFFLINE:-2}
       DATABASE_PATH: /data/rcnotify.sqlite
       TZ: ${TZ:-UTC}
-    ports:
-      # Point the Dokploy domain at this port. Change PORT if 3000 is taken on the host.
-      - "${PORT:-3000}:${PORT:-3000}"
+    # Traefik reaches the container over dokploy-network, so the port only needs to be exposed,
+    # not published to the host. Point the Dokploy domain at this same port.
+    expose:
+      - "${PORT:-3000}"
     volumes:
       - rc-notify-data:/data
+    networks:
+      - dokploy-network
 
 volumes:
   rc-notify-data:
+
+# Created by Dokploy itself; Traefik can only route to containers attached to it.
+networks:
+  dokploy-network:
+    external: true

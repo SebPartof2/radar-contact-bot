@@ -73,11 +73,30 @@ const definition = new SlashCommandBuilder()
     sub.setName('list').setDescription('Show everything this server is monitoring'),
   );
 
-/** Registered globally so the bot works in every server it is invited to. */
-export async function registerCommands() {
-  const rest = new REST().setToken(config.token);
-  await rest.put(Routes.applicationCommands(config.clientId), { body: [definition.toJSON()] });
-  console.log('[commands] registered /rc globally');
+const rest = new REST().setToken(config.token);
+const body = [definition.toJSON()];
+
+/**
+ * Global commands can take up to an hour to propagate, so we also register per guild —
+ * those show up immediately, and a guild command shadows the global one of the same name.
+ */
+export async function registerCommands(client) {
+  await rest
+    .put(Routes.applicationCommands(config.clientId), { body })
+    .then(() => console.log('[commands] registered /rc globally'))
+    .catch((error) => console.error('[commands] global registration failed:', error));
+
+  await Promise.all([...client.guilds.cache.keys()].map((guildId) => registerForGuild(guildId)));
+}
+
+export async function registerForGuild(guildId) {
+  try {
+    await rest.put(Routes.applicationGuildCommands(config.clientId, guildId), { body });
+    console.log(`[commands] registered /rc in guild ${guildId}`);
+  } catch (error) {
+    // Almost always a missing applications.commands scope on the invite.
+    console.error(`[commands] registration failed in guild ${guildId}:`, error.message);
+  }
 }
 
 function canManage(interaction, guildConfig) {

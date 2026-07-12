@@ -1,6 +1,6 @@
 import { Client, Events, GatewayIntentBits, MessageFlags } from 'discord.js';
 import { config } from './config.js';
-import { handleInteraction, registerCommands } from './commands.js';
+import { handleInteraction, registerCommands, registerForGuild } from './commands.js';
 import * as db from './db.js';
 import { startTracker } from './tracker.js';
 
@@ -8,8 +8,14 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, async (ready) => {
   console.log(`[ready] logged in as ${ready.user.tag} in ${ready.guilds.cache.size} server(s)`);
-  await registerCommands();
+  await registerCommands(ready);
   startTracker(ready);
+});
+
+// Invited to a new server — put the commands there right away.
+client.on(Events.GuildCreate, async (guild) => {
+  console.log(`[guild] joined ${guild.name} (${guild.id})`);
+  await registerForGuild(guild.id);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

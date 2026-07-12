@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import * as db from './db.js';
 import { buildEmbed } from './embeds.js';
+import { fetchVnasFeed, indexVnasControllers } from './vnas.js';
 import {
   extractConnections,
   fetchDataFeed,
@@ -44,12 +45,27 @@ async function reconcileSessions(client) {
   }
 }
 
-/** One data feed fetch per tick, fanned out to every configured guild. */
+/** One fetch of each feed per tick, fanned out to every configured guild. */
 async function poll(client) {
   const guilds = db.listGuildConfigs();
   if (guilds.length === 0) return;
 
-  const connections = extractConnections(await fetchDataFeed());
+  // vNAS is enrichment, not the source of truth for who is online: if it fails we still report
+  // everyone from the VATSIM feed, just with the plainer embed.
+  const [feed, vnasFeed] = await Promise.all([
+    fetchDataFeed(),
+    fetchVnasFeed().catch((error) => {
+      console.warn('[poll] vNAS feed unavailable:', error.message);
+      return null;
+    }),
+  ]);
+
+  const vnasByCallsign = vnasFeed ? indexVnasControllers(vnasFeed) : new Map();
+  const connections = extractConnections(feed).map((connection) =>
+    connection.type === 'controller'
+      ? { ...connection, vnas: vnasByCallsign.get(connection.callsign.toUpperCase()) ?? null }
+      : connection,
+  );
 
   for (const guild of guilds) {
     try {

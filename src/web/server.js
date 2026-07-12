@@ -110,8 +110,11 @@ export function startWebServer(client) {
       rating: connection.rating,
       logonTime: connection.logonTime,
       facility: connection.facility ?? null,
-      frequency: connection.frequency ?? null,
-      atis: connection.atis ?? null,
+      // vNAS wins where it has the controller: better frequency, real position names.
+      frequency: connection.vnas?.primary.frequency ?? connection.frequency ?? null,
+      controllerInfo: connection.vnas?.controllerInfo || connection.atis || null,
+      topDown: connection.vnas?.topDown.map((position) => position.radioName) ?? [],
+      vnas: Boolean(connection.vnas),
       flightPlan: connection.flightPlan ?? null,
       watch,
     }));

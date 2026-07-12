@@ -59,7 +59,6 @@ export function extractConnections(feed) {
       cid: String(pilot.cid),
       name: pilot.name,
       callsign: pilot.callsign,
-      rating: RATINGS[pilot.pilot_rating] ?? String(pilot.pilot_rating),
       logonTime: pilot.logon_time,
       server: pilot.server,
       altitude: pilot.altitude,
@@ -122,7 +121,14 @@ export function sessionKey(connection) {
 /** Changes to these fields cause the existing embed to be edited in place. */
 export function fingerprint(connection) {
   if (connection.type === 'controller') {
-    return JSON.stringify([connection.frequency, connection.facility, connection.atis]);
+    const v = connection.vnas;
+    return JSON.stringify([
+      connection.frequency,
+      connection.facility,
+      connection.atis,
+      // Picking up or dropping a top-down position rewrites the embed.
+      v && [v.primary.positionId, v.primary.frequency, v.controllerInfo, v.positionIds],
+    ]);
   }
   const p = connection.flightPlan;
   return JSON.stringify(

@@ -306,22 +306,31 @@ function LiveCard({ entry }) {
         </Typography>
 
         {controller ? (
-          <Box
-            component="pre"
-            sx={{
-              m: 0,
-              mt: 1,
-              p: 1.5,
-              borderRadius: 1,
-              bgcolor: 'action.hover',
-              fontSize: 12,
-              whiteSpace: 'pre-wrap',
-              maxHeight: 140,
-              overflow: 'auto',
-            }}
-          >
-            {entry.atis || 'No ATIS set'}
-          </Box>
+          <Stack spacing={1} sx={{ mt: 1 }}>
+            {entry.topDown?.length > 0 && (
+              <Typography variant="body2" color="text.secondary">
+                <b>Top down:</b> {entry.topDown.join(', ')}
+              </Typography>
+            )}
+            <Typography variant="caption" color="text.secondary">
+              Controller Info
+            </Typography>
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
+                p: 1.5,
+                borderRadius: 1,
+                bgcolor: 'action.hover',
+                fontSize: 12,
+                whiteSpace: 'pre-wrap',
+                maxHeight: 140,
+                overflow: 'auto',
+              }}
+            >
+              {entry.controllerInfo || 'None set'}
+            </Box>
+          </Stack>
         ) : plan ? (
           <Stack spacing={1} sx={{ mt: 1 }}>
             <Typography variant="body2">

@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { showsPositionName } from './vnas.js';
 
 const COLORS = {
   DEL: 0x9b59b6,
@@ -25,9 +26,59 @@ function watchNote(watch, label) {
 }
 
 export function buildEmbed(connection, watch, label) {
-  return connection.type === 'controller'
-    ? controllerEmbed(connection, watch, label)
-    : pilotEmbed(connection, watch, label);
+  if (connection.type !== 'controller') return pilotEmbed(connection, watch, label);
+  // vNAS knows what the controller is actually working, so it wins when it has them.
+  return connection.vnas
+    ? vnasControllerEmbed(connection, watch, label)
+    : controllerEmbed(connection, watch, label);
+}
+
+function vnasControllerEmbed(c, watch, label) {
+  const v = c.vnas;
+  const logon = Math.floor(new Date(v.loginTime ?? c.logonTime).getTime() / 1000);
+
+  // The radio name alone is ambiguous for the positions that split into sectors, so those
+  // get the sector name too: "Miami Center (KEY WEST 06) is online".
+  const title = showsPositionName(c.callsign)
+    ? `${v.primary.radioName} (${v.primary.positionName}) is online`
+    : `${v.primary.radioName} is online`;
+
+  // realName comes back as the CID when the controller hides it; the VATSIM feed still has it.
+  const name = !v.realName || v.realName === v.cid ? c.name : v.realName;
+
+  const embed = new EmbedBuilder()
+    .setColor(COLORS[c.facility] ?? 0x5865f2)
+    .setTitle(title)
+    .setDescription(`**${name}** · ${v.rating}`)
+    .addFields(
+      {
+        name: 'Facility',
+        value: `${v.primary.facilityName} (${v.primary.facilityId})`,
+        inline: true,
+      },
+      { name: 'Frequency', value: `\`${v.primary.frequency}\``, inline: true },
+      { name: 'Logged on', value: `<t:${logon}:R>`, inline: true },
+      { name: 'Callsign', value: `\`${c.callsign}\``, inline: true },
+    );
+
+  // Only controllers actually covering other positions get this field.
+  if (v.topDown.length > 0) {
+    embed.addFields({
+      name: 'Top Down Displays',
+      value: v.topDown.map((position) => position.radioName).join('\n'),
+      inline: true,
+    });
+  }
+
+  embed
+    .addFields({
+      name: 'Controller Info',
+      value: v.controllerInfo ? block(v.controllerInfo) : '*None set*',
+    })
+    .setFooter({ text: `vNAS · ${watchNote(watch, label)}` })
+    .setTimestamp();
+
+  return embed;
 }
 
 function controllerEmbed(c, watch, label) {
@@ -41,7 +92,7 @@ function controllerEmbed(c, watch, label) {
       { name: 'Frequency', value: `\`${c.frequency}\``, inline: true },
       { name: 'Facility', value: c.facility, inline: true },
       { name: 'Logged on', value: `<t:${logon}:R>`, inline: true },
-      { name: 'Controller ATIS', value: c.atis ? block(c.atis) : '*No ATIS set*' },
+      { name: 'Controller Info', value: c.atis ? block(c.atis) : '*None set*' },
     )
     .setFooter({ text: watchNote(watch, label) })
     .setTimestamp();

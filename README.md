@@ -17,12 +17,14 @@ Observers are ignored (OBS facility or OBS rating), as are `_ATIS` connections.
 
 ## What the embeds show
 
-- **Controllers** — callsign, frequency, facility, rating, and the full controller ATIS.
+- **Controllers** — callsign, frequency, facility, rating, and the full controller info.
+  US controllers are enriched from the [vNAS feed](https://live.env.vnas.vatsim.net/data-feed/controllers.json),
+  which adds the real position and radio name, and every position they are covering top-down.
 - **Pilots** — `DEP → ARR`, aircraft, cruise altitude, and the filed route. If they connect
   without a flight plan the embed says so and is edited in place once they file one.
 
-An embed is edited when the underlying details change (ATIS updated, route refiled) and deleted
-once the connection leaves the data feed.
+An embed is edited when the underlying details change (controller info updated, a top-down
+position picked up, route refiled) and deleted once the connection leaves the data feed.
 
 ## Commands
 
@@ -45,7 +47,7 @@ any live embeds it was responsible for, and changing the channel clears the old 
 
 A MUI dashboard ships in the same container and does everything the slash commands do, plus a
 live panel showing which monitored people and positions are on the network right now (with the
-controller's ATIS or the pilot's route inline).
+controller's info or the pilot's route inline).
 
 Sign-in is Discord OAuth. Authorization is not stored in the session: on every request the bot
 checks live guild membership, so a user sees exactly the servers where they hold **Manage

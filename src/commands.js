@@ -77,14 +77,15 @@ const rest = new REST().setToken(config.token);
 const body = [definition.toJSON()];
 
 /**
- * Global commands can take up to an hour to propagate, so we also register per guild —
- * those show up immediately, and a guild command shadows the global one of the same name.
+ * Guild-only registration: it takes effect immediately, whereas global commands can take an
+ * hour to propagate. Guild and global commands with the same name show up side by side rather
+ * than overriding each other, so the global set is cleared to keep /rc from appearing twice.
  */
 export async function registerCommands(client) {
   await rest
-    .put(Routes.applicationCommands(config.clientId), { body })
-    .then(() => console.log('[commands] registered /rc globally'))
-    .catch((error) => console.error('[commands] global registration failed:', error));
+    .put(Routes.applicationCommands(config.clientId), { body: [] })
+    .then(() => console.log('[commands] cleared global commands'))
+    .catch((error) => console.error('[commands] clearing global commands failed:', error.message));
 
   await Promise.all([...client.guilds.cache.keys()].map((guildId) => registerForGuild(guildId)));
 }

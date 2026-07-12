@@ -27,6 +27,14 @@ db.exec(`
     PRIMARY KEY (guild_id, kind, value)
   );
 
+  CREATE TABLE IF NOT EXISTS web_sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    username   TEXT NOT NULL,
+    avatar     TEXT,
+    expires_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS sessions (
     guild_id     TEXT NOT NULL,
     key          TEXT NOT NULL,
@@ -159,6 +167,32 @@ export function deleteSessionsByMessageIds(messageIds) {
 
 export function getAllSessions() {
   return db.prepare('SELECT * FROM sessions').all();
+}
+
+/* --- web dashboard logins --- */
+
+export function createWebSession(token, user, expiresAt) {
+  db.prepare(
+    'INSERT INTO web_sessions (token, user_id, username, avatar, expires_at) VALUES (?, ?, ?, ?, ?)',
+  ).run(token, user.id, user.username, user.avatar ?? null, expiresAt);
+}
+
+export function getWebSession(token) {
+  const row = db.prepare('SELECT * FROM web_sessions WHERE token = ?').get(token);
+  if (!row) return undefined;
+  if (row.expires_at < Date.now()) {
+    deleteWebSession(token);
+    return undefined;
+  }
+  return row;
+}
+
+export function deleteWebSession(token) {
+  db.prepare('DELETE FROM web_sessions WHERE token = ?').run(token);
+}
+
+export function purgeExpiredWebSessions() {
+  db.prepare('DELETE FROM web_sessions WHERE expires_at < ?').run(Date.now());
 }
 
 export default db;

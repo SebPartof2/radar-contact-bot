@@ -10,6 +10,13 @@ import {
   sessionKey,
 } from './vatsim.js';
 
+/** Last poll's matched connections per guild, so the dashboard can render a live view. */
+const liveByGuild = new Map();
+
+export function getLive(guildId) {
+  return liveByGuild.get(guildId) ?? [];
+}
+
 export function startTracker(client) {
   const tick = () => poll(client).catch((error) => console.error('[poll] failed:', error.message));
   reconcileSessions(client)
@@ -62,6 +69,8 @@ async function syncGuild(client, guild, connections) {
     const watch = matchWatch(connection, watches);
     if (watch) online.set(sessionKey(connection), { connection, watch });
   }
+
+  liveByGuild.set(guild.guild_id, [...online.values()]);
 
   for (const [key, { connection, watch }] of online) {
     const label = watches.labels.get(`${watch.kind}:${watch.value}`);

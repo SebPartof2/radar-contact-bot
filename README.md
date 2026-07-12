@@ -41,6 +41,27 @@ All under `/rc`, and all scoped to the server they are run in.
 Members with **Manage Server** always count as managers. Removing a watch immediately deletes
 any live embeds it was responsible for, and changing the channel clears the old one.
 
+## Web dashboard
+
+A MUI dashboard ships in the same container and does everything the slash commands do, plus a
+live panel showing which monitored people and positions are on the network right now (with the
+controller's ATIS or the pilot's route inline).
+
+Sign-in is Discord OAuth. Authorization is not stored in the session: on every request the bot
+checks live guild membership, so a user sees exactly the servers where they hold **Manage
+Server** or that server's configured manager role — the same rule the slash commands use — and
+losing the role revokes access immediately. Changing the channel or role requires Manage Server.
+
+To enable it, set `DISCORD_CLIENT_SECRET` and `BASE_URL`, and add `<BASE_URL>/auth/callback` as
+a redirect URI under **OAuth2** in the Discord developer portal. Leave either unset and the bot
+runs headless, as before.
+
+```bash
+# local development, with the API on :3000 and Vite on :5173 proxying to it
+npm start
+cd web && npm run dev
+```
+
 ## Discord setup
 
 1. Create an application at <https://discord.com/developers/applications>, add a bot, copy the
@@ -54,9 +75,10 @@ any live embeds it was responsible for, and changing the channel clears the old 
 ## Deploying on Dokploy
 
 1. Create a **Compose** service pointed at this repository (`docker-compose.yml` at the root).
-2. Set `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` in the Dokploy environment tab. Everything else
-   is optional — see [.env.example](.env.example).
-3. Deploy. State lives in the `rc-notify-data` volume, so restarts and redeploys keep every
+2. Set `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` in the Dokploy environment tab. For the
+   dashboard, also set `DISCORD_CLIENT_SECRET` and `BASE_URL` — see [.env.example](.env.example).
+3. Attach a domain to the service on port **3000** and use that domain as `BASE_URL`.
+4. Deploy. State lives in the `rc-notify-data` volume, so restarts and redeploys keep every
    server's configuration plus which embeds belong to which live connection.
 
 ## Running locally

@@ -15,4 +15,15 @@ export const config = {
   missedPollsBeforeOffline: Number(process.env.MISSED_POLLS_BEFORE_OFFLINE || 2),
 
   databasePath: process.env.DATABASE_PATH || '/data/rcnotify.sqlite',
+
+  web: {
+    // The dashboard only starts when an OAuth secret and a public URL are configured.
+    enabled: Boolean(process.env.DISCORD_CLIENT_SECRET && process.env.BASE_URL),
+    clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
+    baseUrl: (process.env.BASE_URL || '').replace(/\/$/, ''),
+    port: Number(process.env.PORT || 3000),
+    sessionTtlMs: Number(process.env.SESSION_TTL_MS || 7 * 24 * 60 * 60 * 1000),
+  },
 };
+
+export const OAUTH_REDIRECT_PATH = '/auth/callback';

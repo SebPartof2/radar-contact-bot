@@ -8,10 +8,17 @@ services:
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      # Set these two to turn on the web dashboard.
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      BASE_URL: ${BASE_URL:-}
+      PORT: 3000
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-15000}
       MISSED_POLLS_BEFORE_OFFLINE: ${MISSED_POLLS_BEFORE_OFFLINE:-2}
       DATABASE_PATH: /data/rcnotify.sqlite
       TZ: ${TZ:-UTC}
+    ports:
+      # Dokploy points its domain at this port; drop the mapping if you only want the bot.
+      - "3000:3000"
     volumes:
       - rc-notify-data:/data
 

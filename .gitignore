@@ -4,3 +4,5 @@ node_modules/
 *.sqlite-shm
 *.sqlite-wal
 data/
+web/node_modules/
+web/dist/

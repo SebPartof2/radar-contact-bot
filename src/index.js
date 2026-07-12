@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { handleInteraction, registerCommands, registerForGuild } from './commands.js';
 import * as db from './db.js';
 import { startTracker } from './tracker.js';
+import { startWebServer } from './web/server.js';
 
 // GuildMessages carries message-delete events; it is not a privileged intent and we never
 // read message content. Without it we would not notice someone deleting one of our embeds.
@@ -14,6 +15,12 @@ client.once(Events.ClientReady, async (ready) => {
   console.log(`[ready] logged in as ${ready.user.tag} in ${ready.guilds.cache.size} server(s)`);
   await registerCommands(ready);
   startTracker(ready);
+
+  if (config.web.enabled) {
+    startWebServer(ready);
+  } else {
+    console.log('[web] dashboard disabled — set DISCORD_CLIENT_SECRET and BASE_URL to enable it');
+  }
 });
 
 // Invited to a new server — put the commands there right away.

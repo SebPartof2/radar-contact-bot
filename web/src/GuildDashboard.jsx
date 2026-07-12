@@ -35,6 +35,21 @@ import { api } from './api.js';
 
 const LIVE_REFRESH_MS = 15_000;
 
+const WATCH_KINDS = {
+  cid: { label: 'CID', color: 'secondary' },
+  prefix: { label: 'Prefix', color: 'primary' },
+  position: { label: 'Position', color: 'warning' },
+  facility: { label: 'Facility', color: 'info' },
+};
+
+/** Position ids are ULIDs, so show the callsign the server stored as the label instead. */
+function watchTarget(watch) {
+  if (watch.kind === 'cid') return watch.value;
+  if (watch.kind === 'prefix') return `${watch.value}_*`;
+  if (watch.kind === 'facility') return `${watch.value}_*`;
+  return watch.label?.split(' (')[0] ?? watch.value;
+}
+
 export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
   const [guild, setGuild] = useState(null);
   const [live, setLive] = useState([]);
@@ -200,13 +215,13 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
                         <TableCell>
                           <Chip
                             size="small"
-                            label={watch.kind === 'cid' ? 'CID' : 'Prefix'}
-                            color={watch.kind === 'cid' ? 'secondary' : 'primary'}
+                            label={WATCH_KINDS[watch.kind]?.label ?? watch.kind}
+                            color={WATCH_KINDS[watch.kind]?.color ?? 'default'}
                             variant="outlined"
                           />
                         </TableCell>
                         <TableCell sx={{ fontFamily: 'monospace' }}>
-                          {watch.kind === 'cid' ? watch.value : `${watch.value}_*`}
+                          {watchTarget(watch)}
                         </TableCell>
                         <TableCell sx={{ color: 'text.secondary' }}>{watch.label || '—'}</TableCell>
                         <TableCell align="right">

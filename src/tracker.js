@@ -2,6 +2,7 @@ import { config } from './config.js';
 import * as db from './db.js';
 import { buildEmbed } from './embeds.js';
 import { fetchVnasFeed, indexVnasControllers } from './vnas.js';
+import { facilityCovers } from './nas.js';
 import {
   extractConnections,
   fetchDataFeed,
@@ -82,7 +83,7 @@ async function syncGuild(client, guild, connections) {
 
   const online = new Map();
   for (const connection of connections) {
-    const watch = matchWatch(connection, watches);
+    const watch = matchWatch(connection, watches, facilityCovers);
     if (watch) online.set(sessionKey(connection), { connection, watch });
   }
 

@@ -8,6 +8,8 @@ import {
   Container,
   MenuItem,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Toolbar,
   Typography,
@@ -16,6 +18,7 @@ import RadarIcon from '@mui/icons-material/Radar';
 import { api } from './api.js';
 import Login from './Login.jsx';
 import GuildDashboard from './GuildDashboard.jsx';
+import NasTree from './NasTree.jsx';
 
 const guildIcon = (guild) =>
   guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=64` : undefined;
@@ -23,6 +26,7 @@ const guildIcon = (guild) =>
 export default function App() {
   const [state, setState] = useState({ status: 'loading' });
   const [guildId, setGuildId] = useState('');
+  const [tab, setTab] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -133,12 +137,27 @@ export default function App() {
             </Typography>
           </Box>
         ) : (
-          <GuildDashboard
-            key={guildId}
-            guildId={guildId}
-            isAdmin={guilds.find((g) => g.id === guildId)?.isAdmin}
-            onConfigured={load}
-          />
+          <>
+            <Tabs
+              value={tab}
+              onChange={(event, next) => setTab(next)}
+              sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            >
+              <Tab label="Monitors" />
+              <Tab label="vNAS Airspace" />
+            </Tabs>
+
+            {tab === 0 ? (
+              <GuildDashboard
+                key={guildId}
+                guildId={guildId}
+                isAdmin={guilds.find((g) => g.id === guildId)?.isAdmin}
+                onConfigured={load}
+              />
+            ) : (
+              <NasTree key={guildId} guildId={guildId} isManager />
+            )}
+          </>
         )}
       </Container>
     </Box>

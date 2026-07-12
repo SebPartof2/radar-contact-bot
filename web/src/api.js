@@ -14,6 +14,7 @@ async function request(path, options = {}) {
 
 export const api = {
   me: () => request('/me'),
+  nas: () => request('/nas'),
   logout: () => request('/logout', { method: 'POST' }),
   guild: (id) => request(`/guilds/${id}`),
   live: (id) => request(`/guilds/${id}/live`),

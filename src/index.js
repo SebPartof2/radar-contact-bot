@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { handleInteraction, registerCommands, registerForGuild } from './commands.js';
 import * as db from './db.js';
 import { startTracker } from './tracker.js';
+import { startNasRefresh } from './nas.js';
 import { startWebServer } from './web/server.js';
 
 // GuildMessages carries message-delete events; it is not a privileged intent and we never
@@ -14,6 +15,8 @@ const client = new Client({
 client.once(Events.ClientReady, async (ready) => {
   console.log(`[ready] logged in as ${ready.user.tag} in ${ready.guilds.cache.size} server(s)`);
   await registerCommands(ready);
+  // The airspace tree backs position/facility watches, so it loads before the first poll.
+  await startNasRefresh();
   startTracker(ready);
 
   if (config.web.enabled) {

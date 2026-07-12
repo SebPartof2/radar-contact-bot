@@ -4,6 +4,7 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { config, OAUTH_REDIRECT_PATH } from '../config.js';
 import * as db from '../db.js';
 import { getLive, retractAll, retractUnwatched } from '../tracker.js';
+import { getFacility, getNasTree, getPosition } from '../nas.js';
 import { positionPrefix } from '../vatsim.js';
 import { completeLogin, getAccess, loginUrl, logout, requireUser } from './auth.js';
 
@@ -52,6 +53,13 @@ export function startWebServer(client) {
       });
     }
     res.json({ user: req.user, guilds: guilds.sort((a, b) => a.name.localeCompare(b.name)) });
+  });
+
+  // The airspace tree is identical for everyone and only changes once a day.
+  api.get('/nas', (req, res) => {
+    const tree = getNasTree();
+    if (!tree) return res.status(503).json({ error: 'The vNAS airspace tree is not loaded yet' });
+    res.set('Cache-Control', 'private, max-age=3600').json({ tree });
   });
 
   // Every route below is scoped to a guild the caller is allowed to manage.
@@ -165,13 +173,33 @@ export function startWebServer(client) {
       return res.json({ ok: true, added });
     }
 
-    res.status(400).json({ error: 'kind must be cid or prefix' });
+    // Position and facility ids are opaque, so the label is derived from the airspace tree
+    // rather than trusted from the client — it is what the embed footer shows.
+    if (kind === 'position') {
+      const found = getPosition(String(req.body.value ?? ''));
+      if (!found) return res.status(400).json({ error: 'Unknown position' });
+      const name = `${found.position.callsign} (${found.position.radioName})`;
+      const added = db.addWatch(guild.id, 'position', found.position.id, name, req.user.id);
+      return res.json({ ok: true, added });
+    }
+
+    if (kind === 'facility') {
+      const facility = getFacility(String(req.body.value ?? ''));
+      if (!facility) return res.status(400).json({ error: 'Unknown facility' });
+      const name = `${facility.name} (${facility.id})`;
+      const added = db.addWatch(guild.id, 'facility', facility.id, name, req.user.id);
+      return res.json({ ok: true, added });
+    }
+
+    res.status(400).json({ error: 'kind must be cid, prefix, position or facility' });
   });
 
   guildRouter.delete('/watches/:kind/:value', async (req, res) => {
     const { guild } = req.access;
     const { kind, value } = req.params;
-    if (!['cid', 'prefix'].includes(kind)) return res.status(400).json({ error: 'Unknown kind' });
+    if (!['cid', 'prefix', 'position', 'facility'].includes(kind)) {
+      return res.status(400).json({ error: 'Unknown kind' });
+    }
 
     const removed = db.removeWatch(guild.id, kind, value);
     if (removed) await retractUnwatched(client, guild.id);

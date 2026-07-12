@@ -101,15 +101,36 @@ export function extractConnections(feed) {
   return connections;
 }
 
-/** Which watch, if any, this connection matches. Prefix watches apply to controllers only. */
-export function matchWatch(connection, { cids, prefixes }) {
-  if (cids.has(connection.cid)) {
-    return { kind: 'cid', value: connection.cid };
+/**
+ * Which watch, if any, this connection matches. Prefix watches apply to controllers only;
+ * position and facility watches additionally need vNAS, which is the only feed that knows
+ * every position a controller is actually working.
+ */
+export function matchWatch(connection, watches, facilityCovers) {
+  const { cids, prefixes, positions, facilities } = watches;
+
+  if (cids.has(connection.cid)) return { kind: 'cid', value: connection.cid };
+  if (connection.type !== 'controller') return null;
+
+  const prefix = positionPrefix(connection.callsign);
+  if (prefixes.has(prefix)) return { kind: 'prefix', value: prefix };
+
+  const vnas = connection.vnas;
+  if (!vnas) return null;
+
+  // Every position they hold counts, not just the one they are signed in as: a Center
+  // controller covering PHX_A_APP top-down is working Phoenix Approach.
+  for (const position of [vnas.primary, ...vnas.topDown]) {
+    if (positions.has(position.positionId)) {
+      return { kind: 'position', value: position.positionId };
+    }
+    for (const facilityId of facilities) {
+      if (facilityCovers(facilityId, position.facilityId)) {
+        return { kind: 'facility', value: facilityId };
+      }
+    }
   }
-  if (connection.type === 'controller') {
-    const prefix = positionPrefix(connection.callsign);
-    if (prefixes.has(prefix)) return { kind: 'prefix', value: prefix };
-  }
+
   return null;
 }
 

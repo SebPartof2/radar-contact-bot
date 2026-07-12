@@ -21,8 +21,18 @@ function block(text, language = '') {
 }
 
 function watchNote(watch, label) {
-  const target = watch.kind === 'cid' ? `CID ${watch.value}` : `${watch.value}_* positions`;
-  return label ? `Watching ${target} · ${label}` : `Watching ${target}`;
+  // Position and facility watches carry a human label (the position or facility name), because
+  // the stored value is a ULID or a bare facility id that means nothing on its own.
+  const targets = {
+    cid: `CID ${watch.value}`,
+    prefix: `${watch.value}_* positions`,
+    position: label ?? `position ${watch.value}`,
+    facility: label ?? watch.value,
+  };
+  const target = targets[watch.kind] ?? watch.value;
+
+  const suffix = watch.kind === 'cid' || watch.kind === 'prefix' ? (label ? ` · ${label}` : '') : '';
+  return `Watching ${target}${suffix}`;
 }
 
 export function buildEmbed(connection, watch, label) {

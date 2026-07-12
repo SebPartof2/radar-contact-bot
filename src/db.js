@@ -19,12 +19,18 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS watches (
     guild_id   TEXT NOT NULL,
-    kind       TEXT NOT NULL CHECK (kind IN ('cid', 'prefix')),
+    kind       TEXT NOT NULL CHECK (kind IN ('cid', 'prefix', 'position', 'facility')),
     value      TEXT NOT NULL,
     label      TEXT,
     added_by   TEXT NOT NULL,
     added_at   INTEGER NOT NULL,
     PRIMARY KEY (guild_id, kind, value)
+  );
+
+  CREATE TABLE IF NOT EXISTS nas_tree (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    json       TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS web_sessions (
@@ -48,6 +54,32 @@ db.exec(`
     PRIMARY KEY (guild_id, key)
   );
 `);
+
+/**
+ * Existing databases have a watches table whose CHECK constraint only allows cid and prefix,
+ * and SQLite cannot alter a constraint in place — the table has to be rebuilt. Guarded by
+ * user_version so this runs exactly once.
+ */
+if (db.pragma('user_version', { simple: true }) < 1) {
+  db.exec(`
+    BEGIN;
+    CREATE TABLE watches_new (
+      guild_id   TEXT NOT NULL,
+      kind       TEXT NOT NULL CHECK (kind IN ('cid', 'prefix', 'position', 'facility')),
+      value      TEXT NOT NULL,
+      label      TEXT,
+      added_by   TEXT NOT NULL,
+      added_at   INTEGER NOT NULL,
+      PRIMARY KEY (guild_id, kind, value)
+    );
+    INSERT INTO watches_new SELECT guild_id, kind, value, label, added_by, added_at FROM watches;
+    DROP TABLE watches;
+    ALTER TABLE watches_new RENAME TO watches;
+    PRAGMA user_version = 1;
+    COMMIT;
+  `);
+  console.log('[db] migrated watches to allow vNAS position and facility watches');
+}
 
 /* --- guild configuration --- */
 
@@ -105,11 +137,28 @@ export function listWatches(guildId) {
 
 export function getWatchSets(guildId) {
   const rows = listWatches(guildId);
+  const of = (kind) => new Set(rows.filter((r) => r.kind === kind).map((r) => r.value));
   return {
-    cids: new Set(rows.filter((r) => r.kind === 'cid').map((r) => r.value)),
-    prefixes: new Set(rows.filter((r) => r.kind === 'prefix').map((r) => r.value)),
+    cids: of('cid'),
+    prefixes: of('prefix'),
+    positions: of('position'),
+    facilities: of('facility'),
     labels: new Map(rows.map((r) => [`${r.kind}:${r.value}`, r.label])),
   };
+}
+
+/* --- cached vNAS airspace tree --- */
+
+export function saveNasTree(tree) {
+  db.prepare(
+    `INSERT INTO nas_tree (id, json, fetched_at) VALUES (1, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at`,
+  ).run(JSON.stringify(tree), Date.now());
+}
+
+export function getNasTree() {
+  const row = db.prepare('SELECT json, fetched_at FROM nas_tree WHERE id = 1').get();
+  return row ? { tree: JSON.parse(row.json), fetchedAt: row.fetched_at } : null;
 }
 
 /* --- live sessions (one Discord message each) --- */

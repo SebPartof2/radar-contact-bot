@@ -1,0 +1,17 @@
+{
+  "name": "rc-notify",
+  "version": "1.0.0",
+  "description": "RC Notify — Discord bot that watches VATSIM for monitored CIDs and position prefixes",
+  "main": "src/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "discord.js": "^14.16.3"
+  }
+}

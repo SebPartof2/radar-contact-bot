@@ -1,0 +1,19 @@
+services:
+  rc-notify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rc-notify
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-15000}
+      MISSED_POLLS_BEFORE_OFFLINE: ${MISSED_POLLS_BEFORE_OFFLINE:-2}
+      DATABASE_PATH: /data/rcnotify.sqlite
+      TZ: ${TZ:-UTC}
+    volumes:
+      - rc-notify-data:/data
+
+volumes:
+  rc-notify-data:

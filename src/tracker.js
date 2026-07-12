@@ -1,0 +1,122 @@
+import { config } from './config.js';
+import * as db from './db.js';
+import { buildEmbed } from './embeds.js';
+import {
+  extractConnections,
+  fetchDataFeed,
+  fingerprint,
+  matchWatch,
+  positionPrefix,
+  sessionKey,
+} from './vatsim.js';
+
+export function startTracker(client) {
+  const tick = () => poll(client).catch((error) => console.error('[poll] failed:', error.message));
+  tick();
+  setInterval(tick, config.pollIntervalMs);
+}
+
+/** One data feed fetch per tick, fanned out to every configured guild. */
+async function poll(client) {
+  const guilds = db.listGuildConfigs();
+  if (guilds.length === 0) return;
+
+  const connections = extractConnections(await fetchDataFeed());
+
+  for (const guild of guilds) {
+    try {
+      await syncGuild(client, guild, connections);
+    } catch (error) {
+      console.error(`[poll] guild ${guild.guild_id} failed:`, error.message);
+    }
+  }
+}
+
+async function syncGuild(client, guild, connections) {
+  const channel = await client.channels.fetch(guild.channel_id);
+  const watches = db.getWatchSets(guild.guild_id);
+
+  const online = new Map();
+  for (const connection of connections) {
+    const watch = matchWatch(connection, watches);
+    if (watch) online.set(sessionKey(connection), { connection, watch });
+  }
+
+  for (const [key, { connection, watch }] of online) {
+    const label = watches.labels.get(`${watch.kind}:${watch.value}`);
+    const existing = db.getSession(guild.guild_id, key);
+    const stamp = fingerprint(connection);
+
+    if (!existing) {
+      await announce(channel, guild.guild_id, key, connection, watch, label, stamp);
+    } else if (existing.fingerprint !== stamp) {
+      await update(channel, existing, connection, watch, label, stamp);
+    } else {
+      db.markSeen(guild.guild_id, key, stamp);
+    }
+  }
+
+  for (const session of db.getSessions(guild.guild_id)) {
+    if (online.has(session.key)) continue;
+    // The feed drops entries for a tick now and then, so require a few misses in a row.
+    const missed = db.incrementMissedPolls(guild.guild_id, session.key);
+    if (missed >= config.missedPollsBeforeOffline) await retract(client, session);
+  }
+}
+
+async function announce(channel, guildId, key, connection, watch, label, stamp) {
+  const message = await channel.send({ embeds: [buildEmbed(connection, watch, label)] });
+  db.upsertSession({
+    guild_id: guildId,
+    key,
+    cid: connection.cid,
+    callsign: connection.callsign,
+    message_id: message.id,
+    channel_id: channel.id,
+    fingerprint: stamp,
+    seen_at: Date.now(),
+  });
+  console.log(`[${guildId}] online: ${connection.callsign} (${connection.cid})`);
+}
+
+async function update(channel, session, connection, watch, label, stamp) {
+  try {
+    const message = await channel.messages.fetch(session.message_id);
+    await message.edit({ embeds: [buildEmbed(connection, watch, label)] });
+    db.markSeen(session.guild_id, session.key, stamp);
+  } catch (error) {
+    // Message was deleted out from under us, or the notify channel moved — post a fresh one.
+    console.warn(`[${session.guild_id}] re-posting ${session.callsign}: ${error.message}`);
+    db.deleteSession(session.guild_id, session.key);
+    await announce(channel, session.guild_id, session.key, connection, watch, label, stamp);
+  }
+}
+
+async function retract(client, session) {
+  try {
+    const channel = await client.channels.fetch(session.channel_id);
+    const message = await channel.messages.fetch(session.message_id);
+    await message.delete();
+  } catch {
+    // Already gone; nothing to remove.
+  }
+  db.deleteSession(session.guild_id, session.key);
+  console.log(`[${session.guild_id}] offline: ${session.callsign} (${session.cid})`);
+}
+
+/** Called after a watch is removed so its messages disappear without waiting for a poll. */
+export async function retractUnwatched(client, guildId) {
+  const { cids, prefixes } = db.getWatchSets(guildId);
+
+  for (const session of db.getSessions(guildId)) {
+    if (cids.has(session.cid) || prefixes.has(positionPrefix(session.callsign))) continue;
+    await retract(client, session);
+  }
+}
+
+/** Called when the notify channel changes so stale embeds do not linger in the old one. */
+export async function retractAll(client, guildId) {
+  for (const session of db.getSessions(guildId)) {
+    await retract(client, session);
+  }
+}

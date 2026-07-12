@@ -1,34 +1,36 @@
+# RC Notify — Discord bot + web dashboard in one service.
+#
+# Local use:
+#   1. cp .env.example .env  &&  edit it
+#   2. docker compose --env-file .env up --build
+#   3. open http://localhost:3000
+#
+# On Dokploy: deploy this compose file and set the same variables in the service's
+# Environment panel. Dokploy's proxy handles the domain/HTTPS — point the domain at
+# service "rc-notify", port 3000. The published port below is only used for local runs.
+
 services:
   rc-notify:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rc-notify
     restart: unless-stopped
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
-      # Set these two to turn on the web dashboard.
+      # Set both of these to turn on the web dashboard.
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
-      BASE_URL: ${BASE_URL:-}
-      PORT: ${PORT:-3000}
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+      # The container always listens on 3000; this is the port the Dokploy domain targets.
+      PORT: 3000
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-15000}
       MISSED_POLLS_BEFORE_OFFLINE: ${MISSED_POLLS_BEFORE_OFFLINE:-2}
       DATABASE_PATH: /data/rcnotify.sqlite
       TZ: ${TZ:-UTC}
-    # Traefik reaches the container over dokploy-network, so the port only needs to be exposed,
-    # not published to the host. Point the Dokploy domain at this same port.
-    expose:
-      - "${PORT:-3000}"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
     volumes:
       - rc-notify-data:/data
-    networks:
-      - dokploy-network
 
 volumes:
   rc-notify-data:
-
-# Created by Dokploy itself; Traefik can only route to containers attached to it.
-networks:
-  dokploy-network:
-    external: true

@@ -35,7 +35,7 @@ function controllerEmbed(c, watch, label) {
 
   const embed = new EmbedBuilder()
     .setColor(COLORS[c.facility] ?? 0x5865f2)
-    .setTitle(`🎧 ${c.callsign} is online`)
+    .setTitle(`${c.callsign} is online`)
     .setDescription(`**${c.name}** (${c.cid}) · ${c.rating}`)
     .addFields(
       { name: 'Frequency', value: `\`${c.frequency}\``, inline: true },
@@ -55,7 +55,7 @@ function pilotEmbed(p, watch, label) {
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.pilot)
-    .setTitle(`✈️ ${p.callsign} is online`)
+    .setTitle(`${p.callsign} is online`)
     .setDescription(`**${p.name}** (${p.cid})`)
     .setFooter({ text: watchNote(watch, label) })
     .setTimestamp();

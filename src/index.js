@@ -4,6 +4,7 @@ import { handleInteraction, registerCommands, registerForGuild } from './command
 import * as db from './db.js';
 import { startTracker } from './tracker.js';
 import { startNasRefresh } from './nas.js';
+import { startIronMicRefresh } from './ironmic.js';
 import { startWebServer } from './web/server.js';
 
 // GuildMessages carries message-delete events; it is not a privileged intent and we never
@@ -17,6 +18,7 @@ client.once(Events.ClientReady, async (ready) => {
   await registerCommands(ready);
   // The airspace tree backs position/facility watches, so it loads before the first poll.
   await startNasRefresh();
+  await startIronMicRefresh();
   startTracker(ready);
 
   if (config.web.enabled) {

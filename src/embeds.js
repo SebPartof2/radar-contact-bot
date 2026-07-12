@@ -1,5 +1,18 @@
 import { EmbedBuilder } from 'discord.js';
 import { showsPositionName } from './vnas.js';
+import { MEDALS, getStanding } from './ironmic.js';
+
+const hours = (value) => `${value.toFixed(1)}h`;
+
+/** "#2 TWR · 84.4h" plus the gap to whoever is directly above and below them. */
+function ironMicValue({ rank, category, hours: total, above, below }) {
+  const gaps = [
+    above && `${hours(above.gapHours)} behind \`${above.callsign}\``,
+    below && `${hours(below.gapHours)} ahead of \`${below.callsign}\``,
+  ].filter(Boolean);
+
+  return `${MEDALS[rank]} **#${rank} ${category}** · ${hours(total)}\n${gaps.join('\n')}`;
+}
 
 const COLORS = {
   DEL: 0x9b59b6,
@@ -70,6 +83,16 @@ function vnasControllerEmbed(c, watch, label) {
       { name: 'Logged on', value: `<t:${logon}:R>`, inline: true },
       { name: 'Callsign', value: `\`${c.callsign}\``, inline: true },
     );
+
+  // Only shown when this callsign is on the iron mic podium for its category.
+  const standing = getStanding(c.callsign);
+  if (standing) {
+    embed.addFields({
+      name: 'Iron Mic',
+      value: ironMicValue(standing),
+      inline: true,
+    });
+  }
 
   // Only controllers actually covering other positions get this field.
   if (v.topDown.length > 0) {

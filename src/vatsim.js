@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { getStanding } from './ironmic.js';
 
 export const RATINGS = {
   '-1': 'INAC',
@@ -162,12 +163,15 @@ export function sessionKey(connection) {
 export function fingerprint(connection) {
   if (connection.type === 'controller') {
     const v = connection.vnas;
+    // The iron mic standing is refreshed hourly, so a long session's hours stay current.
+    const standing = v && getStanding(connection.callsign);
     return JSON.stringify([
       connection.frequency,
       connection.facility,
       connection.atis,
       // Picking up or dropping a top-down position rewrites the embed.
       v && [v.primary.positionId, v.primary.frequency, v.controllerInfo, v.positionIds],
+      standing && [standing.rank, standing.hours.toFixed(1)],
     ]);
   }
   const p = connection.flightPlan;

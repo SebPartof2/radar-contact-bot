@@ -3,7 +3,7 @@ import express from 'express';
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { config, OAUTH_REDIRECT_PATH } from '../config.js';
 import * as db from '../db.js';
-import { getLive, retractAll, retractUnwatched } from '../tracker.js';
+import { getLive, reconcileWatches, retractAll } from '../tracker.js';
 import { facilityCovers, getFacility, getNasTree, getPosition } from '../nas.js';
 import { positionPrefix } from '../vatsim.js';
 import { completeLogin, getAccess, loginUrl, logout, requireUser } from './auth.js';
@@ -226,14 +226,14 @@ export function startWebServer(client) {
     const removed = db.removeWatch(guild.id, kind, value);
     if (removed) {
       if (kind === 'facility') pruneOrphanedExclusions(guild.id);
-      await retractUnwatched(client, guild.id);
+      await reconcileWatches(client, guild.id);
     }
     res.json({ ok: true, removed });
   });
 
   /* Exclusions carve a hole in a facility watch: "all of ZAB except Phoenix Tower". */
 
-  guildRouter.post('/exclusions', (req, res) => {
+  guildRouter.post('/exclusions', async (req, res) => {
     const { guild } = req.access;
     const { kind, value } = req.body ?? {};
 
@@ -248,6 +248,8 @@ export function startWebServer(client) {
     }
 
     const added = db.addExclusion(guild.id, kind, String(value));
+    // Excluding someone who is on right now has to take their message down immediately.
+    if (added) await reconcileWatches(client, guild.id);
     res.json({ ok: true, added });
   });
 

@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import { config } from './config.js';
 import * as db from './db.js';
-import { retractAll, retractUnwatched } from './tracker.js';
+import { reconcileWatches, retractAll } from './tracker.js';
 
 const definition = new SlashCommandBuilder()
   .setName('rc')
@@ -239,7 +239,7 @@ export async function handleInteraction(interaction) {
       await reply(
         removed ? `Stopped monitoring CID \`${cid}\`.` : `CID \`${cid}\` was not monitored.`,
       );
-      if (removed) await retractUnwatched(interaction.client, guildId);
+      if (removed) await reconcileWatches(interaction.client, guildId);
       return;
     }
 
@@ -251,7 +251,7 @@ export async function handleInteraction(interaction) {
           ? `Stopped monitoring \`${prefix}_*\` positions.`
           : `\`${prefix}_*\` was not monitored.`,
       );
-      if (removed) await retractUnwatched(interaction.client, guildId);
+      if (removed) await reconcileWatches(interaction.client, guildId);
       return;
     }
   }

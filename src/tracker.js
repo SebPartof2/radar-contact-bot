@@ -16,6 +16,8 @@ import {
 
 /** Last poll's matched connections per guild, so the dashboard can render a live view. */
 const liveByGuild = new Map();
+/** Last poll's full connection list, so a watch change can be applied without waiting for a poll. */
+let lastConnections = [];
 
 export function getLive(guildId) {
   return liveByGuild.get(guildId) ?? [];
@@ -69,6 +71,8 @@ async function poll(client) {
       ? { ...connection, vnas: vnasByCallsign.get(connection.callsign.toUpperCase()) ?? null }
       : connection,
   );
+
+  lastConnections = connections;
 
   for (const guild of guilds) {
     try {
@@ -156,15 +160,22 @@ async function retract(client, session) {
 }
 
 /**
- * Called after a watch is removed so its messages disappear without waiting for a poll. Each
- * session records the watch that produced it, so this is an exact lookup rather than a guess —
- * a session created by a facility watch is not collateral damage when a CID watch is removed.
+ * Called whenever a guild's watches or exclusions change, so its messages catch up immediately
+ * instead of waiting for the next poll. Rather than guessing which sessions a change affects,
+ * this re-runs the real matching rules over the last poll's connections: anything that no longer
+ * matches is retracted. That covers removing a watch, excluding a position, and excluding a
+ * facility that shadows others beneath it — all with one rule.
  */
-export async function retractUnwatched(client, guildId) {
-  const live = new Set(db.listWatches(guildId).map((watch) => `${watch.kind}:${watch.value}`));
+export async function reconcileWatches(client, guildId) {
+  const watches = db.getWatchSets(guildId);
+
+  const stillMatched = new Set();
+  for (const connection of lastConnections) {
+    if (matchWatch(connection, watches, nas)) stillMatched.add(sessionKey(connection));
+  }
 
   for (const session of db.getSessions(guildId)) {
-    if (live.has(`${session.watch_kind}:${session.watch_value}`)) continue;
+    if (stillMatched.has(session.key)) continue;
     await retract(client, session);
   }
 }

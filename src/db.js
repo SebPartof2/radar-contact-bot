@@ -148,4 +148,17 @@ export function deleteSession(guildId, key) {
   db.prepare('DELETE FROM sessions WHERE guild_id = ? AND key = ?').run(guildId, key);
 }
 
+/** Someone deleted our embed by hand — forget it so the next poll posts a fresh one. */
+export function deleteSessionsByMessageIds(messageIds) {
+  if (messageIds.length === 0) return 0;
+  const placeholders = messageIds.map(() => '?').join(', ');
+  return db
+    .prepare(`DELETE FROM sessions WHERE message_id IN (${placeholders})`)
+    .run(...messageIds).changes;
+}
+
+export function getAllSessions() {
+  return db.prepare('SELECT * FROM sessions').all();
+}
+
 export default db;

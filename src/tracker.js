@@ -12,8 +12,29 @@ import {
 
 export function startTracker(client) {
   const tick = () => poll(client).catch((error) => console.error('[poll] failed:', error.message));
-  tick();
-  setInterval(tick, config.pollIntervalMs);
+  reconcileSessions(client)
+    .catch((error) => console.error('[reconcile] failed:', error.message))
+    .finally(() => {
+      tick();
+      setInterval(tick, config.pollIntervalMs);
+    });
+}
+
+/**
+ * Embeds can be deleted while we are offline, and we would never notice: nothing about the
+ * connection changed, so the poll would keep marking the session seen and never touch Discord.
+ * Drop any session whose message is gone so the next poll re-announces it.
+ */
+async function reconcileSessions(client) {
+  for (const session of db.getAllSessions()) {
+    try {
+      const channel = await client.channels.fetch(session.channel_id);
+      await channel.messages.fetch(session.message_id);
+    } catch {
+      db.deleteSession(session.guild_id, session.key);
+      console.log(`[${session.guild_id}] embed for ${session.callsign} is gone, will re-post`);
+    }
+  }
 }
 
 /** One data feed fetch per tick, fanned out to every configured guild. */

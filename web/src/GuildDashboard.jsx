@@ -64,12 +64,14 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
 
   const [channelId, setChannelId] = useState('');
   const [roleId, setRoleId] = useState('');
+  const [pilotChannelId, setPilotChannelId] = useState('');
 
   const loadGuild = useCallback(async () => {
     const data = await api.guild(guildId);
     setGuild(data);
     setChannelId(data.config?.channelId ?? '');
     setRoleId(data.config?.managerRoleId ?? '');
+    setPilotChannelId(data.config?.pilotChannelId ?? '');
   }, [guildId]);
 
   const loadLive = useCallback(async () => {
@@ -106,7 +108,10 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
     );
   }
 
-  const dirty = channelId !== (guild.config?.channelId ?? '') || roleId !== (guild.config?.managerRoleId ?? '');
+  const dirty =
+    channelId !== (guild.config?.channelId ?? '') ||
+    roleId !== (guild.config?.managerRoleId ?? '') ||
+    pilotChannelId !== (guild.config?.pilotChannelId ?? '');
 
   return (
     <Stack spacing={3}>
@@ -132,7 +137,7 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
                 <TextField
                   select
                   fullWidth
-                  label="Notification channel"
+                  label="Controller channel"
                   value={channelId}
                   disabled={!isAdmin}
                   onChange={(e) => setChannelId(e.target.value)}
@@ -142,6 +147,25 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
                       : 'Only channels the bot can post and delete in are listed'
                   }
                 >
+                  {guild.channels.map((channel) => (
+                    <MenuItem key={channel.id} value={channel.id}>
+                      #{channel.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                <TextField
+                  select
+                  fullWidth
+                  label="Pilot channel"
+                  value={pilotChannelId}
+                  disabled={!isAdmin}
+                  onChange={(e) => setPilotChannelId(e.target.value)}
+                  helperText="Leave as the controller channel to keep everything together"
+                >
+                  <MenuItem value="">
+                    <em>Same as controllers</em>
+                  </MenuItem>
                   {guild.channels.map((channel) => (
                     <MenuItem key={channel.id} value={channel.id}>
                       #{channel.name}
@@ -172,7 +196,11 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
                   disabled={!isAdmin || !dirty || !channelId || !roleId}
                   onClick={() =>
                     run(async () => {
-                      await api.saveConfig(guildId, { channelId, managerRoleId: roleId });
+                      await api.saveConfig(guildId, {
+                        channelId,
+                        managerRoleId: roleId,
+                        pilotChannelId: pilotChannelId || null,
+                      });
                       onConfigured?.();
                     }, 'Configuration saved')
                   }

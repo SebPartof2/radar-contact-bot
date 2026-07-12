@@ -30,6 +30,12 @@ const definition = new SlashCommandBuilder()
           .setName('role')
           .setDescription('Role allowed to add and remove monitors')
           .setRequired(true),
+      )
+      .addChannelOption((o) =>
+        o
+          .setName('pilot-channel')
+          .setDescription('Post pilots here instead (default: the same channel as controllers)')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
       ),
   )
   .addSubcommand((sub) =>
@@ -144,25 +150,35 @@ export async function handleInteraction(interaction) {
 
     const channel = interaction.options.getChannel('channel');
     const role = interaction.options.getRole('role');
+    const pilotChannel = interaction.options.getChannel('pilot-channel');
 
     const me = await interaction.guild.members.fetchMe();
-    const perms = channel.permissionsFor(me);
-    const missing = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'ManageMessages'].filter(
-      (p) => !perms?.has(PermissionFlagsBits[p]),
-    );
-    if (missing.length > 0) {
-      return reply(`I am missing these permissions in ${channel}: ${missing.join(', ')}.`);
+    for (const target of [channel, pilotChannel].filter(Boolean)) {
+      const perms = target.permissionsFor(me);
+      const missing = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'ManageMessages'].filter(
+        (p) => !perms?.has(PermissionFlagsBits[p]),
+      );
+      if (missing.length > 0) {
+        return reply(`I am missing these permissions in ${target}: ${missing.join(', ')}.`);
+      }
     }
 
     const previous = db.getGuildConfig(guildId);
-    db.setGuildConfig(guildId, channel.id, role.id);
-    await reply(`RC Notify will post in ${channel}. ${role} can manage monitors.`);
+    db.setGuildConfig(guildId, channel.id, role.id, pilotChannel?.id ?? null);
 
-    if (previous && previous.channel_id !== channel.id) {
-      // Live embeds belong to the old channel; clear them so they do not go stale there.
-      // Sessions carry their own channel id, so this still finds them after the swap.
-      await retractAll(interaction.client, guildId);
-    }
+    await reply(
+      pilotChannel
+        ? `RC Notify will post controllers in ${channel} and pilots in ${pilotChannel}. ${role} can manage monitors.`
+        : `RC Notify will post in ${channel}. ${role} can manage monitors.`,
+    );
+
+    // Live embeds belong to the old channels; clear them so they do not go stale there.
+    // Sessions carry their own channel id, so this still finds them after the swap.
+    const moved =
+      previous &&
+      (previous.channel_id !== channel.id ||
+        (previous.pilot_channel_id ?? null) !== (pilotChannel?.id ?? null));
+    if (moved) await retractAll(interaction.client, guildId);
     return;
   }
 
@@ -172,8 +188,13 @@ export async function handleInteraction(interaction) {
   }
 
   if (sub === 'config') {
+    const pilots = guildConfig.pilot_channel_id
+      ? `<#${guildConfig.pilot_channel_id}>`
+      : `<#${guildConfig.channel_id}> (same as controllers)`;
+
     return reply(
-      `**Channel:** <#${guildConfig.channel_id}>\n` +
+      `**Controllers:** <#${guildConfig.channel_id}>\n` +
+        `**Pilots:** ${pilots}\n` +
         `**Manager role:** <@&${guildConfig.manager_role_id}>\n` +
         `**Monitors:** ${db.listWatches(guildId).length}`,
     );

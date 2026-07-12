@@ -109,7 +109,11 @@ export function startWebServer(client) {
       icon: guild.icon,
       isAdmin,
       config: guildConfig
-        ? { channelId: guildConfig.channel_id, managerRoleId: guildConfig.manager_role_id }
+        ? {
+            channelId: guildConfig.channel_id,
+            managerRoleId: guildConfig.manager_role_id,
+            pilotChannelId: guildConfig.pilot_channel_id ?? '',
+          }
         : null,
       channels,
       roles,
@@ -149,22 +153,35 @@ export function startWebServer(client) {
     const { guild, guildConfig, isAdmin } = req.access;
     if (!isAdmin) return res.status(403).json({ error: 'Manage Server is required' });
 
-    const { channelId, managerRoleId } = req.body ?? {};
+    const { channelId, managerRoleId, pilotChannelId } = req.body ?? {};
     const channel = guild.channels.cache.get(channelId);
     const role = guild.roles.cache.get(managerRoleId);
     if (!channel) return res.status(400).json({ error: 'Unknown channel' });
     if (!role) return res.status(400).json({ error: 'Unknown role' });
 
-    const permissions = channel.permissionsFor(guild.members.me);
-    const missing = CHANNEL_PERMISSIONS.filter((p) => !permissions?.has(PermissionFlagsBits[p]));
-    if (missing.length > 0) {
-      return res.status(400).json({ error: `Missing in #${channel.name}: ${missing.join(', ')}` });
+    // Empty means pilots go wherever controllers go.
+    const pilotChannel = pilotChannelId ? guild.channels.cache.get(pilotChannelId) : null;
+    if (pilotChannelId && !pilotChannel) {
+      return res.status(400).json({ error: 'Unknown pilot channel' });
     }
 
-    db.setGuildConfig(guild.id, channel.id, role.id);
-    if (guildConfig && guildConfig.channel_id !== channel.id) {
-      await retractAll(client, guild.id);
+    for (const target of [channel, pilotChannel].filter(Boolean)) {
+      const permissions = target.permissionsFor(guild.members.me);
+      const missing = CHANNEL_PERMISSIONS.filter((p) => !permissions?.has(PermissionFlagsBits[p]));
+      if (missing.length > 0) {
+        return res.status(400).json({ error: `Missing in #${target.name}: ${missing.join(', ')}` });
+      }
     }
+
+    db.setGuildConfig(guild.id, channel.id, role.id, pilotChannel?.id ?? null);
+
+    // Anything already posted in a channel we no longer use is moved by the next poll, but a
+    // message left in the old channel would never be cleaned up, so clear them now.
+    const movedControllers = guildConfig && guildConfig.channel_id !== channel.id;
+    const movedPilots =
+      guildConfig && (guildConfig.pilot_channel_id ?? null) !== (pilotChannel?.id ?? null);
+    if (movedControllers || movedPilots) await retractAll(client, guild.id);
+
     res.json({ ok: true });
   });
 

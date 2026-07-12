@@ -117,17 +117,37 @@ if (db.pragma('user_version', { simple: true }) < 3) {
   console.log('[db] migrated watches to support pilot/controller CID modes');
 }
 
+// Pilots can be sent to their own channel. NULL means "same channel as controllers", which is
+// what every existing server does today.
+if (db.pragma('user_version', { simple: true }) < 4) {
+  const columns = db.pragma('table_info(guilds)').map((column) => column.name);
+  if (!columns.includes('pilot_channel_id')) {
+    db.exec('ALTER TABLE guilds ADD COLUMN pilot_channel_id TEXT');
+  }
+  db.pragma('user_version = 4');
+  console.log('[db] migrated guilds to support a separate pilot channel');
+}
+
 /* --- guild configuration --- */
 
-export function setGuildConfig(guildId, channelId, managerRoleId) {
+/** pilotChannelId of null means pilots are posted in the same channel as controllers. */
+export function setGuildConfig(guildId, channelId, managerRoleId, pilotChannelId = null) {
   db.prepare(
-    `INSERT INTO guilds (guild_id, channel_id, manager_role_id, updated_at)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO guilds (guild_id, channel_id, manager_role_id, pilot_channel_id, updated_at)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (guild_id) DO UPDATE SET
-       channel_id      = excluded.channel_id,
-       manager_role_id = excluded.manager_role_id,
-       updated_at      = excluded.updated_at`,
-  ).run(guildId, channelId, managerRoleId, Date.now());
+       channel_id       = excluded.channel_id,
+       manager_role_id  = excluded.manager_role_id,
+       pilot_channel_id = excluded.pilot_channel_id,
+       updated_at       = excluded.updated_at`,
+  ).run(guildId, channelId, managerRoleId, pilotChannelId, Date.now());
+}
+
+/** Where a connection of this type belongs. Pilots fall back to the controller channel. */
+export function channelFor(guildConfig, type) {
+  return type === 'pilot'
+    ? (guildConfig.pilot_channel_id ?? guildConfig.channel_id)
+    : guildConfig.channel_id;
 }
 
 export function getGuildConfig(guildId) {

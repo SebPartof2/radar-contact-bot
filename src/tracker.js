@@ -84,7 +84,6 @@ async function poll(client) {
 }
 
 async function syncGuild(client, guild, connections) {
-  const channel = await client.channels.fetch(guild.channel_id);
   const watches = db.getWatchSets(guild.guild_id);
 
   const online = new Map();
@@ -100,7 +99,14 @@ async function syncGuild(client, guild, connections) {
     const existing = db.getSession(guild.guild_id, key);
     const stamp = fingerprint(connection);
 
+    // Pilots and controllers can live in different channels.
+    const channel = await client.channels.fetch(db.channelFor(guild, connection.type));
+
     if (!existing) {
+      await announce(channel, guild.guild_id, key, connection, watch, label, stamp);
+    } else if (existing.channel_id !== channel.id) {
+      // The channel for this type was reconfigured while they were online: move the message.
+      await retract(client, existing);
       await announce(channel, guild.guild_id, key, connection, watch, label, stamp);
     } else if (existing.fingerprint !== stamp) {
       await update(channel, existing, connection, watch, label, stamp);

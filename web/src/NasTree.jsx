@@ -24,7 +24,27 @@ import SearchIcon from '@mui/icons-material/Search';
 import PublicIcon from '@mui/icons-material/Public';
 import { api } from './api.js';
 
-const TYPE_LABELS = { Artcc: 'ARTCC', Tracon: 'TRACON', Atct: 'ATCT', Nas: 'NAS' };
+const FACILITY_TYPES = {
+  Artcc: { label: 'ARTCC', color: '#f1c40f' },
+  Tracon: { label: 'TRACON', color: '#3498db' },
+  Atct: { label: 'ATCT', color: '#e74c3c' },
+  Nas: { label: 'NAS', color: '#5865f2' },
+};
+
+/** Colour positions the way controllers already read callsigns: by the suffix. */
+const POSITION_COLORS = {
+  CTR: '#f1c40f',
+  APP: '#3498db',
+  DEP: '#3498db',
+  TWR: '#e74c3c',
+  GND: '#2ecc71',
+  DEL: '#9b59b6',
+  TMU: '#e67e22',
+  FSS: '#95a5a6',
+};
+
+const positionColor = (callsign) =>
+  POSITION_COLORS[String(callsign ?? '').toUpperCase().split('_').pop()] ?? '#8b949e';
 
 const matches = (text, query) => String(text ?? '').toLowerCase().includes(query);
 
@@ -215,6 +235,7 @@ function FacilityRow({
   const inherited = Boolean(coveredBy);
 
   const hasChildren = facility.children.length > 0 || facility.positions.length > 0;
+  const type = FACILITY_TYPES[facility.type] ?? { label: facility.type, color: '#8b949e' };
 
   return (
     <>
@@ -225,7 +246,11 @@ function FacilityRow({
         sx={{
           pl: depth * 3,
           pr: 2,
-          py: 0.25,
+          py: 0.35,
+          // A coloured rail on the left makes the depth obvious without counting indents.
+          borderLeft: 3,
+          borderColor: watched || inherited ? type.color : 'transparent',
+          bgcolor: watched ? `${type.color}14` : 'transparent',
           '&:hover': { bgcolor: 'action.hover' },
         }}
       >
@@ -251,60 +276,46 @@ function FacilityRow({
               checked={watched || inherited}
               disabled={!isManager || inherited || busy === facility.id}
               onChange={() => onToggleWatch('facility', facility.id, watched)}
+              sx={{ color: type.color, '&.Mui-checked': { color: type.color } }}
             />
           </span>
         </Tooltip>
 
+        <Chip
+          label={type.label}
+          size="small"
+          sx={{
+            height: 18,
+            fontSize: 10,
+            fontWeight: 700,
+            minWidth: 58,
+            color: type.color,
+            bgcolor: `${type.color}22`,
+            border: 'none',
+          }}
+        />
+
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: depth === 0 ? 700 : 500, fontFamily: 'monospace', color: type.color }}
+        >
+          {facility.id}
+        </Typography>
         <Typography variant="body2" sx={{ fontWeight: depth === 0 ? 600 : 400 }}>
           {facility.name}
         </Typography>
-        <Chip label={facility.id} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
-        <Typography variant="caption" color="text.secondary">
-          {TYPE_LABELS[facility.type] ?? facility.type}
-          {facility.positions.length > 0 && ` · ${facility.positions.length} pos`}
-        </Typography>
+
+        <Box sx={{ flexGrow: 1 }} />
+        {facility.positions.length > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            {facility.positions.length} pos
+          </Typography>
+        )}
       </Stack>
 
       <Collapse in={open} unmountOnExit>
-        {facility.positions.map((position) => {
-          const positionWatched = watchedPositions.has(position.id);
-          return (
-            <Stack
-              key={position.id}
-              direction="row"
-              alignItems="center"
-              spacing={0.5}
-              sx={{
-                pl: (depth + 1) * 3 + 4.5,
-                pr: 2,
-                py: 0.1,
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              <Tooltip title={covered ? `Already covered by ${covered}` : 'Watch this position'}>
-                <span>
-                  <Checkbox
-                    size="small"
-                    checked={positionWatched || Boolean(covered)}
-                    disabled={!isManager || Boolean(covered) || busy === position.id}
-                    onChange={() => onToggleWatch('position', position.id, positionWatched)}
-                  />
-                </span>
-              </Tooltip>
-
-              <Typography variant="body2" sx={{ fontFamily: 'monospace', minWidth: 110 }}>
-                {position.callsign}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
-                {position.radioName} — {position.name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                {position.frequency}
-              </Typography>
-            </Stack>
-          );
-        })}
-
+        {/* Child facilities first: the airspace hierarchy matters more than one facility's
+            own positions, and burying a TRACON under 40 Center sectors hides it. */}
         {facility.children.map((child) => (
           <FacilityRow
             key={child.id}
@@ -321,6 +332,58 @@ function FacilityRow({
             coveredBy={covered}
           />
         ))}
+
+        {facility.positions.map((position) => {
+          const positionWatched = watchedPositions.has(position.id);
+          const color = positionColor(position.callsign);
+          const on = positionWatched || Boolean(covered);
+
+          return (
+            <Stack
+              key={position.id}
+              direction="row"
+              alignItems="center"
+              spacing={1}
+              sx={{
+                pl: (depth + 1) * 3 + 4.5,
+                pr: 2,
+                py: 0.1,
+                borderLeft: 3,
+                borderColor: on ? color : 'transparent',
+                bgcolor: positionWatched ? `${color}14` : 'transparent',
+                '&:hover': { bgcolor: 'action.hover' },
+              }}
+            >
+              <Tooltip title={covered ? `Already covered by ${covered}` : 'Watch this position'}>
+                <span>
+                  <Checkbox
+                    size="small"
+                    checked={on}
+                    disabled={!isManager || Boolean(covered) || busy === position.id}
+                    onChange={() => onToggleWatch('position', position.id, positionWatched)}
+                    sx={{ color, '&.Mui-checked': { color } }}
+                  />
+                </span>
+              </Tooltip>
+
+              <Typography
+                variant="body2"
+                sx={{ fontFamily: 'monospace', fontWeight: 600, color, minWidth: 120 }}
+              >
+                {position.callsign}
+              </Typography>
+              <Typography variant="body2" sx={{ minWidth: 170 }}>
+                {position.radioName}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
+                {position.name}
+              </Typography>
+              <Typography variant="caption" sx={{ fontFamily: 'monospace', color }}>
+                {position.frequency}
+              </Typography>
+            </Stack>
+          );
+        })}
       </Collapse>
     </>
   );

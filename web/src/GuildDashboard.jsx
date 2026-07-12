@@ -35,6 +35,11 @@ import { api } from './api.js';
 
 const LIVE_REFRESH_MS = 15_000;
 
+// The two top cards have to line up: same header height (one has an action button, which grows
+// it), a rule at the same y, and content that stretches so their bottoms meet.
+const CARD = { width: '100%', display: 'flex', flexDirection: 'column' };
+const HEADER = { minHeight: 76, alignItems: 'center', '& .MuiCardHeader-action': { m: 0 } };
+
 const WATCH_KINDS = {
   cid: { label: 'CID', color: 'secondary' },
   prefix: { label: 'Prefix', color: 'primary' },
@@ -114,13 +119,15 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
 
       <Grid container spacing={3} alignItems="stretch">
         <Grid item xs={12} md={5} sx={{ display: 'flex' }}>
-          <Card elevation={0} variant="outlined" sx={{ width: '100%' }}>
+          <Card elevation={0} variant="outlined" sx={CARD}>
             <CardHeader
               title="Configuration"
-              subheader={isAdmin ? 'Where notifications go, and who may edit monitors' : 'Manage Server is required to change this'}
+              subheader={isAdmin ? 'Channel and manager role' : 'Manage Server required to edit'}
               titleTypographyProps={{ variant: 'h6' }}
+              sx={HEADER}
             />
-            <CardContent>
+            <Divider />
+            <CardContent sx={{ flexGrow: 1 }}>
               <Stack spacing={2.5}>
                 <TextField
                   select
@@ -178,11 +185,12 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
         </Grid>
 
         <Grid item xs={12} md={7} sx={{ display: 'flex' }}>
-          <Card elevation={0} variant="outlined" sx={{ width: '100%' }}>
+          <Card elevation={0} variant="outlined" sx={CARD}>
             <CardHeader
               title="Monitors"
               subheader={`${guild.watches.length} watched`}
               titleTypographyProps={{ variant: 'h6' }}
+              sx={HEADER}
               action={
                 <Button
                   startIcon={<AddIcon />}
@@ -194,7 +202,7 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
               }
             />
             <Divider />
-            <CardContent sx={{ p: 0 }}>
+            <CardContent sx={{ p: 0, flexGrow: 1 }}>
               {guild.watches.length === 0 ? (
                 <Typography color="text.secondary" align="center" sx={{ p: 5 }}>
                   Nothing is being monitored yet.

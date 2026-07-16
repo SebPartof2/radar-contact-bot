@@ -4,6 +4,14 @@ import { MEDALS, getStanding } from './ironmic.js';
 
 const hours = (value) => `${value.toFixed(1)}h`;
 
+const FLIGHT_RULES = { I: 'IFR', V: 'VFR', D: 'DVFR', S: 'SVFR' };
+
+function cruiseValue(plan) {
+  const rules = plan.rules && (FLIGHT_RULES[plan.rules] ?? plan.rules);
+  if (!plan.cruise) return rules || '—';
+  return rules ? `${plan.cruise} (${rules})` : plan.cruise;
+}
+
 /** "#2 TWR · 84.4h" plus the gap to whoever is directly above and below them. */
 function ironMicValue({ rank, category, hours: total, above, below }) {
   const gaps = [
@@ -157,7 +165,8 @@ function pilotEmbed(p, watch, label) {
     { name: 'Aircraft', value: plan.aircraft || '—', inline: true },
     {
       name: 'Cruise',
-      value: [plan.cruise, plan.rules && `(${plan.rules})`].filter(Boolean).join(' ') || '—',
+      // "045 (VFR)" — or just "VFR" when they filed no altitude at all.
+      value: cruiseValue(plan),
       inline: true,
     },
     { name: 'Filed route', value: plan.route ? block(plan.route) : '*No route filed*' },

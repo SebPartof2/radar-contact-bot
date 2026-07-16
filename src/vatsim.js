@@ -47,6 +47,18 @@ function isAtis(callsign) {
 }
 
 /**
+ * vNAS re-files every plan a US controller touches as IFR, tucking the real rules into the
+ * altitude as "VFR/45" or "VFR/OTP". Peel that prefix off: the remainder is the cruise
+ * altitude and the rules are really VFR, whatever flight_rules claims.
+ */
+function parseCruise(plan) {
+  const raw = String(plan.altitude ?? '').trim();
+  const match = raw.match(/^VFR\s*\/?\s*(.*)$/i);
+  if (match) return { cruise: match[1].trim(), rules: 'V' };
+  return { cruise: raw, rules: plan.flight_rules || '' };
+}
+
+/**
  * Flattens the feed into a uniform list of connections we are willing to report on.
  * Observers are dropped on the controller side; every pilot counts.
  */
@@ -71,8 +83,7 @@ export function extractConnections(feed) {
             alternate: plan.alternate || '',
             route: plan.route || '',
             aircraft: plan.aircraft_short || plan.aircraft_faa || plan.aircraft || '',
-            cruise: plan.altitude || '',
-            rules: plan.flight_rules || '',
+            ...parseCruise(plan),
             deptime: plan.deptime || '',
           }
         : null,

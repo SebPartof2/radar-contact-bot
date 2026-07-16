@@ -53,6 +53,31 @@ const TOOLTIPS = {
   off: (id) => `Watch ${id}`,
 };
 
+/**
+ * Whether anything below this facility is individually watched or carved out — that is what
+ * turns the parent's checkbox into a dash instead of a plain empty box or check mark.
+ */
+function subtreeStats(facility, sets) {
+  let anyWatched = false;
+  let anyExcluded = false;
+
+  const walk = (node) => {
+    if (anyWatched && anyExcluded) return;
+    for (const position of node.positions) {
+      if (sets.watchedPositions.has(position.id)) anyWatched = true;
+      if (sets.excludedPositions.has(position.id)) anyExcluded = true;
+    }
+    for (const child of node.children) {
+      if (sets.watchedFacilities.has(child.id)) anyWatched = true;
+      if (sets.excludedFacilities.has(child.id)) anyExcluded = true;
+      walk(child);
+    }
+  };
+
+  walk(facility);
+  return { anyWatched, anyExcluded };
+}
+
 const matches = (text, query) => String(text ?? '').toLowerCase().includes(query);
 
 /**
@@ -270,6 +295,12 @@ function FacilityRow({
   const hasChildren = facility.children.length > 0 || facility.positions.length > 0;
   const type = FACILITY_TYPES[facility.type] ?? { label: facility.type, color: '#8b949e' };
 
+  // Partial selection shows as a dash: an unticked group with something watched inside it, a
+  // ticked group with something carved out of it, or an excluded group with re-added positions.
+  const stats = subtreeStats(facility, sets);
+  const indeterminate =
+    watched || covered ? stats.anyExcluded : stats.anyWatched;
+
   return (
     <>
       <Stack
@@ -301,10 +332,15 @@ function FacilityRow({
           <span>
             <Checkbox
               size="small"
-              checked={watched || covered}
+              checked={(watched || covered) && !indeterminate}
+              indeterminate={indeterminate}
               disabled={!isManager || busy === facility.id}
               onChange={() => onToggle('facility', facility.id, state)}
-              sx={{ color: type.color, '&.Mui-checked': { color: type.color } }}
+              sx={{
+                color: type.color,
+                '&.Mui-checked': { color: type.color },
+                '&.MuiCheckbox-indeterminate': { color: type.color },
+              }}
             />
           </span>
         </Tooltip>

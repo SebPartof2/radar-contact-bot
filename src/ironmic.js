@@ -1,7 +1,8 @@
 import { config } from './config.js';
+import { minIronMicRefreshMinutes, IRONMIC_MAX_THRESHOLD } from './db.js';
 
-const REFRESH_MS = 60 * 60 * 1000;
-const TOP_N = 3;
+/** Standings are always ranked this deep; each guild's threshold trims them at embed time. */
+const MAX_RANK = IRONMIC_MAX_THRESHOLD;
 
 /** APP and DEP are one iron mic category: the TRACON. */
 const CATEGORIES = { APP: 'TRACON', DEP: 'TRACON' };
@@ -29,8 +30,8 @@ export async function fetchIronMic() {
 }
 
 /**
- * Ranks every callsign within its category and keeps the standings for the top three, plus the
- * runner-up just outside them — a third place needs to know who is breathing down its neck.
+ * Ranks every callsign within its category and keeps the standings down to MAX_RANK, each with
+ * its neighbours — any rank needs to know who is breathing down its neck.
  */
 export function rankCallsigns(feed) {
   const byCategory = new Map();
@@ -46,7 +47,7 @@ export function rankCallsigns(feed) {
   for (const [cat, entries] of byCategory) {
     const sorted = entries.sort((a, b) => b.durationSeconds - a.durationSeconds);
 
-    for (let index = 0; index < Math.min(TOP_N, sorted.length); index++) {
+    for (let index = 0; index < Math.min(MAX_RANK, sorted.length); index++) {
       const entry = sorted[index];
       const above = sorted[index - 1];
       const below = sorted[index + 1];
@@ -86,17 +87,34 @@ export function getStanding(callsign) {
   return standings.get(`${prefix}:${category(suffix)}`) ?? null;
 }
 
-export async function startIronMicRefresh() {
-  const refresh = async () => {
-    try {
-      standings = rankCallsigns(await fetchIronMic());
-      console.log(`[ironmic] refreshed: ${standings.size} top-${TOP_N} standings`);
-    } catch (error) {
-      // Losing the iron mic data just drops the field from the embeds.
-      console.error('[ironmic] refresh failed:', error.message);
-    }
-  };
+let timer = null;
 
+async function refresh() {
+  try {
+    standings = rankCallsigns(await fetchIronMic());
+    console.log(`[ironmic] refreshed: ${standings.size} standings (top ${MAX_RANK} per category)`);
+  } catch (error) {
+    // Losing the iron mic data just drops the field from the embeds.
+    console.error('[ironmic] refresh failed:', error.message);
+  }
+}
+
+function schedule() {
+  const minutes = minIronMicRefreshMinutes();
+  timer = setTimeout(async () => {
+    await refresh();
+    schedule();
+  }, minutes * 60 * 1000);
+}
+
+/** Called when a guild changes its refresh rate, so the new pace applies now, not a cycle later. */
+export function rescheduleIronMicRefresh() {
+  if (timer) clearTimeout(timer);
+  schedule();
+  console.log(`[ironmic] refresh interval now ${minIronMicRefreshMinutes()} minutes`);
+}
+
+export async function startIronMicRefresh() {
   await refresh();
-  setInterval(() => void refresh(), REFRESH_MS);
+  schedule();
 }

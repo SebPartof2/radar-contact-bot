@@ -19,7 +19,8 @@ function ironMicValue({ rank, category, hours: total, above, below }) {
     below && `${hours(below.gapHours)} ahead of \`${below.callsign}\``,
   ].filter(Boolean);
 
-  return `${MEDALS[rank]} **#${rank} ${category}** · ${hours(total)}\n${gaps.join('\n')}`;
+  const medal = MEDALS[rank] ?? '🎙️';
+  return `${medal} **#${rank} ${category}** · ${hours(total)}\n${gaps.join('\n')}`;
 }
 
 const COLORS = {
@@ -56,15 +57,15 @@ function watchNote(watch, label) {
   return `Watching ${target}${suffix}`;
 }
 
-export function buildEmbed(connection, watch, label) {
+export function buildEmbed(connection, watch, label, options = {}) {
   if (connection.type !== 'controller') return pilotEmbed(connection, watch, label);
   // vNAS knows what the controller is actually working, so it wins when it has them.
   return connection.vnas
-    ? vnasControllerEmbed(connection, watch, label)
+    ? vnasControllerEmbed(connection, watch, label, options)
     : controllerEmbed(connection, watch, label);
 }
 
-function vnasControllerEmbed(c, watch, label) {
+function vnasControllerEmbed(c, watch, label, { ironMicThreshold = 3 } = {}) {
   const v = c.vnas;
   const logon = Math.floor(new Date(v.loginTime ?? c.logonTime).getTime() / 1000);
 
@@ -92,9 +93,9 @@ function vnasControllerEmbed(c, watch, label) {
       { name: 'Callsign', value: `\`${c.callsign}\``, inline: true },
     );
 
-  // Only shown when this callsign is on the iron mic podium for its category.
+  // Only shown when this callsign is inside the guild's iron mic threshold for its category.
   const standing = getStanding(c.callsign);
-  if (standing) {
+  if (standing && standing.rank <= ironMicThreshold) {
     embed.addFields({
       name: 'Iron Mic',
       value: ironMicValue(standing),

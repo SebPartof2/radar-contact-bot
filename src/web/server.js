@@ -5,6 +5,7 @@ import { config, OAUTH_REDIRECT_PATH } from '../config.js';
 import * as db from '../db.js';
 import { getLive, reconcileWatches, retractAll } from '../tracker.js';
 import { facilityCovers, getFacility, getNasTree, getPosition } from '../nas.js';
+import { rescheduleIronMicRefresh } from '../ironmic.js';
 import { positionPrefix } from '../vatsim.js';
 import { completeLogin, getAccess, loginUrl, logout, requireUser } from './auth.js';
 
@@ -115,6 +116,12 @@ export function startWebServer(client) {
             pilotChannelId: guildConfig.pilot_channel_id ?? '',
           }
         : null,
+      ironMic: guildConfig
+        ? {
+            threshold: guildConfig.ironmic_threshold ?? 3,
+            refreshMinutes: guildConfig.ironmic_refresh_minutes ?? 60,
+          }
+        : null,
       channels,
       roles,
       watches: db.listWatches(guild.id).map((w) => ({
@@ -182,6 +189,34 @@ export function startWebServer(client) {
       guildConfig && (guildConfig.pilot_channel_id ?? null) !== (pilotChannel?.id ?? null);
     if (movedControllers || movedPilots) await retractAll(client, guild.id);
 
+    res.json({ ok: true });
+  });
+
+  guildRouter.put('/ironmic', (req, res) => {
+    const { guild } = req.access;
+    if (!db.getGuildConfig(guild.id)) {
+      return res.status(400).json({ error: 'Set the channel and manager role first' });
+    }
+
+    const threshold = Number(req.body?.threshold);
+    const refreshMinutes = Number(req.body?.refreshMinutes);
+
+    if (!Number.isInteger(threshold) || threshold < 1 || threshold > db.IRONMIC_MAX_THRESHOLD) {
+      return res.status(400).json({ error: `threshold must be 1–${db.IRONMIC_MAX_THRESHOLD}` });
+    }
+    if (
+      !Number.isInteger(refreshMinutes) ||
+      refreshMinutes < db.IRONMIC_MIN_REFRESH_MINUTES ||
+      refreshMinutes > 24 * 60
+    ) {
+      return res.status(400).json({
+        error: `refreshMinutes must be ${db.IRONMIC_MIN_REFRESH_MINUTES}–1440`,
+      });
+    }
+
+    db.setIronMicSettings(guild.id, threshold, refreshMinutes);
+    // The fetcher runs at the fastest rate any guild wants; apply the new pace immediately.
+    rescheduleIronMicRefresh();
     res.json({ ok: true });
   });
 

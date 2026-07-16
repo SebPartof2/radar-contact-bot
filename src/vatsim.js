@@ -171,18 +171,20 @@ export function sessionKey(connection) {
 }
 
 /** Changes to these fields cause the existing embed to be edited in place. */
-export function fingerprint(connection) {
+export function fingerprint(connection, ironMicThreshold = 3) {
   if (connection.type === 'controller') {
     const v = connection.vnas;
-    // The iron mic standing is refreshed hourly, so a long session's hours stay current.
+    // Only a standing inside this guild's threshold appears on the embed, so only that can
+    // invalidate it — a #7 rank changing hours must not churn a top-3 guild's messages.
     const standing = v && getStanding(connection.callsign);
+    const shown = standing && standing.rank <= ironMicThreshold ? standing : null;
     return JSON.stringify([
       connection.frequency,
       connection.facility,
       connection.atis,
       // Picking up or dropping a top-down position rewrites the embed.
       v && [v.primary.positionId, v.primary.frequency, v.controllerInfo, v.positionIds],
-      standing && [standing.rank, standing.hours.toFixed(1)],
+      shown && [shown.rank, shown.hours.toFixed(1)],
     ]);
   }
   const p = connection.flightPlan;

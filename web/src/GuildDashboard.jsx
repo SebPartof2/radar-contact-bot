@@ -40,6 +40,18 @@ const LIVE_REFRESH_MS = 15_000;
 const CARD = { width: '100%', display: 'flex', flexDirection: 'column' };
 const HEADER = { minHeight: 76, alignItems: 'center', '& .MuiCardHeader-action': { m: 0 } };
 
+const IRONMIC_THRESHOLDS = [3, 5, 10, 15, 20, 25];
+const IRONMIC_REFRESH = [
+  { minutes: 10, label: 'Every 10 minutes' },
+  { minutes: 15, label: 'Every 15 minutes' },
+  { minutes: 30, label: 'Every 30 minutes' },
+  { minutes: 60, label: 'Every hour' },
+  { minutes: 120, label: 'Every 2 hours' },
+  { minutes: 360, label: 'Every 6 hours' },
+  { minutes: 720, label: 'Every 12 hours' },
+  { minutes: 1440, label: 'Once a day' },
+];
+
 const WATCH_KINDS = {
   cid: { label: 'CID', color: 'secondary' },
   prefix: { label: 'Prefix', color: 'primary' },
@@ -65,6 +77,8 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
   const [channelId, setChannelId] = useState('');
   const [roleId, setRoleId] = useState('');
   const [pilotChannelId, setPilotChannelId] = useState('');
+  const [ironThreshold, setIronThreshold] = useState(3);
+  const [ironRefresh, setIronRefresh] = useState(60);
 
   const loadGuild = useCallback(async () => {
     const data = await api.guild(guildId);
@@ -72,6 +86,8 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
     setChannelId(data.config?.channelId ?? '');
     setRoleId(data.config?.managerRoleId ?? '');
     setPilotChannelId(data.config?.pilotChannelId ?? '');
+    setIronThreshold(data.ironMic?.threshold ?? 3);
+    setIronRefresh(data.ironMic?.refreshMinutes ?? 60);
   }, [guildId]);
 
   const loadLive = useCallback(async () => {
@@ -300,6 +316,73 @@ export default function GuildDashboard({ guildId, isAdmin, onConfigured }) {
           </Card>
         </Grid>
       </Grid>
+
+      <Card elevation={0} variant="outlined">
+        <CardHeader
+          title="Iron Mic"
+          subheader="When a monitored controller ranks in their category, their embed shows it"
+          titleTypographyProps={{ variant: 'h6' }}
+          sx={HEADER}
+        />
+        <Divider />
+        <CardContent>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2.5} alignItems="flex-start">
+            <TextField
+              select
+              label="Show ranks up to"
+              value={ironThreshold}
+              disabled={!guild.config}
+              onChange={(e) => setIronThreshold(Number(e.target.value))}
+              sx={{ minWidth: 200 }}
+              helperText="Deeper ranks mean more embeds carry the field"
+            >
+              {IRONMIC_THRESHOLDS.map((n) => (
+                <MenuItem key={n} value={n}>
+                  Top {n}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              select
+              label="Refresh standings"
+              value={ironRefresh}
+              disabled={!guild.config}
+              onChange={(e) => setIronRefresh(Number(e.target.value))}
+              sx={{ minWidth: 200 }}
+              helperText="How fresh the hours and gaps are"
+            >
+              {IRONMIC_REFRESH.map((option) => (
+                <MenuItem key={option.minutes} value={option.minutes}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Button
+              variant="contained"
+              sx={{ mt: 1 }}
+              disabled={
+                !guild.config ||
+                (ironThreshold === (guild.ironMic?.threshold ?? 3) &&
+                  ironRefresh === (guild.ironMic?.refreshMinutes ?? 60))
+              }
+              onClick={() =>
+                run(
+                  () =>
+                    api.saveIronMic(guildId, {
+                      threshold: ironThreshold,
+                      refreshMinutes: ironRefresh,
+                    }),
+                  'Iron Mic settings saved',
+                )
+              }
+            >
+              Save
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
 
       <Card elevation={0} variant="outlined">
         <CardHeader

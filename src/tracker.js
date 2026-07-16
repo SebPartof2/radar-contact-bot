@@ -94,22 +94,24 @@ async function syncGuild(client, guild, connections) {
 
   liveByGuild.set(guild.guild_id, [...online.values()]);
 
+  const embedOptions = { ironMicThreshold: guild.ironmic_threshold ?? 3 };
+
   for (const [key, { connection, watch }] of online) {
     const label = watches.labels.get(`${watch.kind}:${watch.value}`);
     const existing = db.getSession(guild.guild_id, key);
-    const stamp = fingerprint(connection);
+    const stamp = fingerprint(connection, embedOptions.ironMicThreshold);
 
     // Pilots and controllers can live in different channels.
     const channel = await client.channels.fetch(db.channelFor(guild, connection.type));
 
     if (!existing) {
-      await announce(channel, guild.guild_id, key, connection, watch, label, stamp);
+      await announce(channel, guild.guild_id, key, connection, watch, label, stamp, embedOptions);
     } else if (existing.channel_id !== channel.id) {
       // The channel for this type was reconfigured while they were online: move the message.
       await retract(client, existing);
-      await announce(channel, guild.guild_id, key, connection, watch, label, stamp);
+      await announce(channel, guild.guild_id, key, connection, watch, label, stamp, embedOptions);
     } else if (existing.fingerprint !== stamp) {
-      await update(channel, existing, connection, watch, label, stamp);
+      await update(channel, existing, connection, watch, label, stamp, embedOptions);
     } else {
       db.markSeen(guild.guild_id, key, stamp);
     }
@@ -123,8 +125,10 @@ async function syncGuild(client, guild, connections) {
   }
 }
 
-async function announce(channel, guildId, key, connection, watch, label, stamp) {
-  const message = await channel.send({ embeds: [buildEmbed(connection, watch, label)] });
+async function announce(channel, guildId, key, connection, watch, label, stamp, embedOptions) {
+  const message = await channel.send({
+    embeds: [buildEmbed(connection, watch, label, embedOptions)],
+  });
   db.upsertSession({
     guild_id: guildId,
     key,
@@ -140,16 +144,25 @@ async function announce(channel, guildId, key, connection, watch, label, stamp) 
   console.log(`[${guildId}] online: ${connection.callsign} (${connection.cid})`);
 }
 
-async function update(channel, session, connection, watch, label, stamp) {
+async function update(channel, session, connection, watch, label, stamp, embedOptions) {
   try {
     const message = await channel.messages.fetch(session.message_id);
-    await message.edit({ embeds: [buildEmbed(connection, watch, label)] });
+    await message.edit({ embeds: [buildEmbed(connection, watch, label, embedOptions)] });
     db.markSeen(session.guild_id, session.key, stamp);
   } catch (error) {
     // Message was deleted out from under us, or the notify channel moved — post a fresh one.
     console.warn(`[${session.guild_id}] re-posting ${session.callsign}: ${error.message}`);
     db.deleteSession(session.guild_id, session.key);
-    await announce(channel, session.guild_id, session.key, connection, watch, label, stamp);
+    await announce(
+      channel,
+      session.guild_id,
+      session.key,
+      connection,
+      watch,
+      label,
+      stamp,
+      embedOptions,
+    );
   }
 }
 

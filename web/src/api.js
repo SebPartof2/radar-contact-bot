@@ -19,6 +19,7 @@ export const api = {
   guild: (id) => request(`/guilds/${id}`),
   live: (id) => request(`/guilds/${id}/live`),
   saveConfig: (id, body) => request(`/guilds/${id}/config`, { method: 'PUT', body }),
+  saveIronMic: (id, body) => request(`/guilds/${id}/ironmic`, { method: 'PUT', body }),
   addWatch: (id, body) => request(`/guilds/${id}/watches`, { method: 'POST', body }),
   removeWatch: (id, kind, value) =>
     request(`/guilds/${id}/watches/${kind}/${encodeURIComponent(value)}`, { method: 'DELETE' }),

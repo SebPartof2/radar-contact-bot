@@ -128,6 +128,20 @@ if (db.pragma('user_version', { simple: true }) < 4) {
   console.log('[db] migrated guilds to support a separate pilot channel');
 }
 
+// Iron mic tuning: how deep the podium goes (top 3 by default) and how often the standings
+// refresh (hourly by default, never faster than every 10 minutes).
+if (db.pragma('user_version', { simple: true }) < 5) {
+  const columns = db.pragma('table_info(guilds)').map((column) => column.name);
+  if (!columns.includes('ironmic_threshold')) {
+    db.exec(`
+      ALTER TABLE guilds ADD COLUMN ironmic_threshold INTEGER NOT NULL DEFAULT 3;
+      ALTER TABLE guilds ADD COLUMN ironmic_refresh_minutes INTEGER NOT NULL DEFAULT 60;
+    `);
+  }
+  db.pragma('user_version = 5');
+  console.log('[db] migrated guilds to support iron mic settings');
+}
+
 /* --- guild configuration --- */
 
 /** pilotChannelId of null means pilots are posted in the same channel as controllers. */
@@ -148,6 +162,24 @@ export function channelFor(guildConfig, type) {
   return type === 'pilot'
     ? (guildConfig.pilot_channel_id ?? guildConfig.channel_id)
     : guildConfig.channel_id;
+}
+
+export const IRONMIC_MIN_REFRESH_MINUTES = 10;
+export const IRONMIC_MAX_THRESHOLD = 25;
+
+export function setIronMicSettings(guildId, threshold, refreshMinutes) {
+  db.prepare(
+    'UPDATE guilds SET ironmic_threshold = ?, ironmic_refresh_minutes = ? WHERE guild_id = ?',
+  ).run(threshold, refreshMinutes, guildId);
+}
+
+/**
+ * One fetcher serves every guild, so it runs at the fastest refresh any of them asked for —
+ * a guild wanting 10-minute standings should not wait on another's daily setting.
+ */
+export function minIronMicRefreshMinutes() {
+  const row = db.prepare('SELECT MIN(ironmic_refresh_minutes) AS minutes FROM guilds').get();
+  return Math.max(IRONMIC_MIN_REFRESH_MINUTES, row?.minutes ?? 60);
 }
 
 export function getGuildConfig(guildId) {
